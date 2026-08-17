@@ -643,3 +643,20 @@ a { color: var(--accent); }
 .dormant-list { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
 .dormant-list .question { opacity: .55; border-left-color: var(--border); }
 .dormant-list .question:hover { opacity: .85; }
+
+/* ---------- live board banner ---------- */
+
+.live-bar {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 8px 14px;
+  background: var(--accent-deep);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--good); box-shadow: 0 0 6px var(--good);
+}
+.live-dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.live-text { flex: 1; min-width: 0; color: #cfe0ff; }
+.live-players { display: flex; gap: 6px; flex-wrap: wrap; }

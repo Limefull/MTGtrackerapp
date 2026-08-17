@@ -179,6 +179,7 @@
    */
   function namesForIds(ids) {
     loadIdMap();
+    loadCache();   // this path banks full cards too, so the cache must be open
 
     var unique = [];
     var seen = {};
@@ -241,6 +242,7 @@
 
   global.MTGScryfall = {
     fetchCards: fetchCards,
+    namesForIds: namesForIds,
     getCached: getCached,
     cacheSize: cacheSize,
     clearCache: clearCache,

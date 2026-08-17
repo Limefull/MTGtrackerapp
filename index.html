@@ -64,6 +64,8 @@
       <button class="btn ghost small" id="btn-next-turn" title="End turn">End turn &#8635;</button>
     </div>
 
+    <div class="live-bar hidden" id="live-bar"></div>
+
     <nav class="phase-rail" id="phase-rail" aria-label="Turn phases"></nav>
 
     <div class="scroll" id="play-scroll">
@@ -143,6 +145,7 @@
           <button class="btn danger" id="btn-clear-cache">Clear card cache</button>
         </div>
         <input type="file" id="file-input" accept="application/json" class="hidden">
+        <p class="muted" id="live-info"></p>
       </div>
       <div class="card">
         <h2>About</h2>

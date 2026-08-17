@@ -566,6 +566,8 @@
     $('#seg-opp').classList.toggle('active', !state.game.myTurn);
     $('#btn-next-phase').classList.remove('warn');
 
+    renderLiveBar();
+    $('#btn-add-card').classList.toggle('hidden', isLive());
     renderRail();
     renderNow();
     renderWatch();
@@ -684,8 +686,8 @@
                live.map(function (q) { return questionRow(q, false); }).join('');
 
     if (!live.length && !esc2.length) {
-      html += '<div class="empty small">Nothing you control triggers off events yet. ' +
-        'Track a card with <b>+ Card</b> and its questions appear here.</div>';
+      html += '<div class="empty small">Nothing you control triggers off events yet.' +
+        (isLive() ? '' : ' Track a card with <b>+ Card</b> and its questions appear here.') + '</div>';
     }
 
     if (dormant.length) {
@@ -778,9 +780,11 @@
 
     var host = $('#board-list');
     if (!active.length && !gone.length) {
-      host.innerHTML = '<div class="empty small">Tap <b>+ Card</b> only for permanents that fire ' +
-        'on their own schedule — upkeep, end step, combat. Everything else is covered by the ' +
-        'questions above.</div>';
+      host.innerHTML = isLive()
+        ? '<div class="empty small">Waiting for cards to hit your battlefield on edhplay.</div>'
+        : '<div class="empty small">Tap <b>+ Card</b> only for permanents that fire ' +
+          'on their own schedule — upkeep, end step, combat. Everything else is covered by the ' +
+          'questions above.</div>';
       return;
     }
 
@@ -1168,6 +1172,19 @@
     var row = $('#row-autotrack');
     if (row) { row.classList.toggle('hidden', !(global.MTGBridge && global.MTGBridge.available)); }
     $('#cache-info').textContent = Scry.cacheSize() + ' cards cached.';
+
+    var live = $('#live-info');
+    if (live) {
+      if (!(global.MTGBridge && global.MTGBridge.available)) {
+        live.textContent = 'Board reading is only available in the Chrome extension.';
+      } else if (!liveSnapshot) {
+        live.textContent = 'No board seen yet. Open a game on edhplay.com in another tab.';
+      } else {
+        live.textContent = 'Last board: ' + (liveSnapshot.cards || []).length + ' identified card(s), ' +
+          snapshotPlayers(liveSnapshot).length + ' player(s), zones seen: ' +
+          Object.keys(liveSnapshot.zoneCounts || {}).join(', ') + '.';
+      }
+    }
     $('#version-line').textContent = 'Version ' + VERSION;
   }
 
@@ -1228,6 +1245,25 @@
     $('#btn-next-phase').addEventListener('click', nextPhase);
     $('#btn-prev-phase').addEventListener('click', function () { setPhase(state.game.phaseIndex - 1); });
     $('#btn-add-card').addEventListener('click', openAdd);
+
+    $('#live-bar').addEventListener('click', function (ev) {
+      var pick = ev.target.closest('[data-player]');
+      if (pick) {
+        state.settings.edhPlayer = pick.getAttribute('data-player');
+        persist();
+        lastSnapshotKey = '';
+        if (liveSnapshot) { applySnapshot(liveSnapshot); }
+        renderLiveBar();
+        return;
+      }
+      if (ev.target.closest('#btn-change-player')) {
+        state.settings.edhPlayer = null;
+        // Ignore the page's own guess so the choice is genuinely re-asked.
+        if (liveSnapshot) { liveSnapshot.self = null; }
+        persist();
+        renderLiveBar();
+      }
+    });
 
     $('#phase-rail').addEventListener('click', function (ev) {
       var chip = ev.target.closest('[data-phase]');
@@ -1455,66 +1491,134 @@
     commander: 'command'
   };
 
+  var LIVE_DECK_ID = 'live-edhplay';
   var lastSnapshotKey = '';
+  var liveSnapshot = null;
 
   function startBoardBridge() {
     if (!global.MTGBridge || !global.MTGBridge.available) { return; }
     global.MTGBridge.subscribe(function (snap) {
+      liveSnapshot = snap;
       if (!state.settings.autoTrack) { return; }
       applySnapshot(snap);
     });
   }
 
-  function applySnapshot(snap) {
-    var deck = activeDeck();
-    if (!deck || !state.game || !snap || !snap.cards) { return; }
+  function isLive() { return !!(state.game && state.game.deckId === LIVE_DECK_ID); }
 
-    // Only your own cards; opponents' boards are not in your decklist anyway.
+  /** Players the page can see, so you can say which one is you. */
+  function snapshotPlayers(snap) {
+    var seen = {};
+    (snap.cards || []).forEach(function (c) { if (c.player) { seen[c.player] = 1; } });
+    return Object.keys(seen);
+  }
+
+  function chosenPlayer(snap) {
+    var picked = state.settings.edhPlayer;
+    var players = snapshotPlayers(snap);
+    if (picked && players.indexOf(picked) !== -1) { return picked; }
+    if (snap.self) { return snap.self; }
+    return players.length === 1 ? players[0] : null;
+  }
+
+  /**
+   * The board is the source of truth: build the tracked deck out of whatever is
+   * on it. Nothing needs importing and no card ever has to be added by hand.
+   */
+  function applySnapshot(snap) {
+    if (!snap || !snap.cards || !snap.cards.length) { return; }
+
+    var me = chosenPlayer(snap);
+    if (!me) { renderLiveBar(); return; }   // ambiguous: let the player choose
+
     var mine = snap.cards.filter(function (c) {
-      return (!snap.self || c.player === snap.self) && EDH_ZONES[c.zone];
+      return c.player === me && EDH_ZONES[c.zone];
     });
 
-    var fingerprint = mine.map(function (c) { return c.cardId + ':' + c.zone; }).sort().join('|');
+    var fingerprint = me + '#' + mine.map(function (c) { return c.cardId + ':' + c.zone; }).sort().join('|');
     if (fingerprint === lastSnapshotKey) { return; }
     lastSnapshotKey = fingerprint;
 
     Scry.namesForIds(mine.map(function (c) { return c.scryfallId; })).then(function (names) {
-      var wanted = {};        // deck card name -> list of app zones
+      var zonesByName = {};
       mine.forEach(function (c) {
         var name = names[String(c.scryfallId).toLowerCase()];
         if (!name) { return; }
-        (wanted[name] = wanted[name] || []).push(EDH_ZONES[c.zone]);
+        (zonesByName[name] = zonesByName[name] || []).push(EDH_ZONES[c.zone]);
       });
 
-      var g = state.game;
-      g.autoKeys = g.autoKeys || {};
-      var stillHere = {};
-      var changed = false;
-
-      deck.entries.forEach(function (entry) {
-        var zonesForCard = wanted[entry.name] || [];
-        for (var i = 0; i < entry.qty; i++) {
-          var k = instKey(entry.name, i);
-          var target = zonesForCard[i] || null;
-
-          if (target) {
-            stillHere[k] = 1;
-            if (zoneOf(k) !== target) { setZone(k, target); changed = true; }
-            g.autoKeys[k] = 1;
-          } else if (g.autoKeys[k]) {
-            // It was placed automatically and the page no longer shows it.
-            if (zoneOf(k) !== 'deck') { setZone(k, 'deck'); changed = true; }
-            delete g.autoKeys[k];
-          }
-        }
-      });
-
-      if (changed) {
-        persist();
-        renderPlay();
+      var deckNames = Object.keys(zonesByName).sort();
+      var deck = deckById(LIVE_DECK_ID);
+      if (!deck) {
+        deck = { id: LIVE_DECK_ID, name: 'edhplay board', created: new Date().toISOString(),
+                 live: true, entries: [] };
+        state.decks.push(deck);
       }
+      deck.entries = deckNames.map(function (name) {
+        return { qty: zonesByName[name].length, name: name, section: 'deck', isCommander: false };
+      });
+
+      // Switch the game over to the live board the first time one shows up.
+      if (!state.game || state.game.deckId !== LIVE_DECK_ID) {
+        state.game = { deckId: LIVE_DECK_ID, turn: 1, phaseIndex: 1, myTurn: true,
+                       zones: {}, resolved: {}, answers: {}, counters: {}, tiers: {} };
+        state.activeDeckId = LIVE_DECK_ID;
+      }
+
+      hydrate(deck);
+
+      var zones = {};
+      deckNames.forEach(function (name) {
+        zonesByName[name].forEach(function (zone, i) { zones[instKey(name, i)] = zone; });
+      });
+      state.game.zones = zones;
+
+      persist();
+      if ($('#screen-decks').classList.contains('hidden') === false) { showScreen('screen-play'); }
+      renderPlay();
     });
   }
+
+  /** Banner shown while the panel is mirroring a live board. */
+  function renderLiveBar() {
+    var bar = $('#live-bar');
+    if (!bar) { return; }
+
+    // Driven by whether a board has actually been seen, not by how it arrived.
+    if (!liveSnapshot || !liveSnapshot.cards || !liveSnapshot.cards.length) {
+      bar.classList.add('hidden');
+      return;
+    }
+
+    var players = snapshotPlayers(liveSnapshot);
+    var me = chosenPlayer(liveSnapshot);
+    bar.classList.remove('hidden');
+
+    if (!me) {
+      bar.innerHTML = '<span class="live-dot warn"></span>' +
+        '<span class="live-text">Which player are you?</span>' +
+        '<span class="live-players">' + players.map(function (p, i) {
+          return '<button class="chip" data-player="' + esc(p) + '">Player ' + (i + 1) + '</button>';
+        }).join('') + '</span>';
+      return;
+    }
+
+    var tracked = activeBoard().length;
+    bar.innerHTML = '<span class="live-dot"></span>' +
+      '<span class="live-text">Reading your board from edhplay · ' + tracked + ' card' +
+      (tracked === 1 ? '' : 's') + '</span>' +
+      (players.length > 1
+        ? '<button class="btn ghost small" id="btn-change-player">Not me</button>'
+        : '');
+  }
+
+  // Exposed so a board reading can be inspected or replayed by hand when the
+  // page markup changes and the mirror stops working.
+  global.MTGLive = {
+    apply: function (snap) { liveSnapshot = snap; lastSnapshotKey = ''; applySnapshot(snap); },
+    last: function () { return liveSnapshot; },
+    isLive: isLive
+  };
 
   /* ---------------- boot ---------------- */
 

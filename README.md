@@ -204,12 +204,18 @@ To build it locally instead:
 node tools/build-extension.js   # then Load unpacked -> extension/
 ```
 
-**It reads your board automatically.** On edhplay.com a content script watches
-the page and mirrors your battlefield, graveyard, exile, hand and command zone
-into the tracker, so there is nothing to tap in. edhplay tags every card with its
-Scryfall id, so matching is exact rather than name-guessing, and only cards
-belonging to you are read. Turn it off with *Read my board automatically* in
-settings and the manual **+ Card** flow still works.
+**On edhplay it runs itself.** You do not import a decklist, you do not add
+cards, you do not tell it what you played. A content script reads the board and
+the panel builds itself from what is actually there — battlefield, graveyard,
+exile, hand and command zone. edhplay tags every card with its Scryfall id, so
+matching is exact rather than name-guessing.
+
+The only thing it ever asks is **which player you are**, and only when the page
+gives it no way to tell. Pick once and it remembers; **Not me** changes it. The
+**+ Card** button hides itself entirely while a live board is being mirrored.
+
+Turn it off with *Read my board automatically* in settings and the app reverts to
+the manual flow used for paper games.
 
 That feature is the one reason the extension asks for access to edhplay.com. It
 is read-only — nothing is clicked or changed, and nothing leaves your browser
