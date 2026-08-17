@@ -197,7 +197,8 @@
 
   function resolvedKey(hit) {
     var g = state.game;
-    return g.turn + '|' + (g.myTurn ? 'y' : 'o') + '|' + phaseId() + '|' + hit.item.key + '|' + hit.trigger.id;
+    return g.turn + '|' + (g.myTurn ? 'y' : 'o') + '|' + (hit.phase || phaseId()) +
+           '|' + hit.item.key + '|' + hit.trigger.id;
   }
 
   function isResolved(hit) { return !!state.game.resolved[resolvedKey(hit)]; }
@@ -350,15 +351,13 @@
   function phaseId() { return D.PHASES[state.game.phaseIndex].id; }
 
   function hitsFor(pid) {
-    return Trig.triggersNow(board(), pid, state.game.myTurn);
+    var hits = Trig.triggersNow(board(), pid, state.game.myTurn);
+    hits.forEach(function (h) { h.phase = pid; });
+    return hits;
   }
 
   function unresolvedCount(pid) {
-    var saved = null;
-    if (pid !== phaseId()) { saved = state.game.phaseIndex; state.game.phaseIndex = D.PHASE_BY_ID[pid].index; }
-    var n = hitsFor(pid).filter(function (h) { return !isResolved(h); }).length;
-    if (saved !== null) { state.game.phaseIndex = saved; }
-    return n;
+    return hitsFor(pid).filter(function (h) { return !isResolved(h); }).length;
   }
 
   /* ---------------- import ---------------- */
@@ -596,6 +595,9 @@
     // would set them by hand is hidden rather than left to silently revert.
     $('#btn-add-card').classList.toggle('hidden', isLive());
     $('.turn-toggle').classList.toggle('hidden', isLive());
+    // No phases to walk on edhplay, so the rail and step buttons go away.
+    $('#phase-rail').classList.toggle('hidden', isLive());
+    $('.dock').classList.toggle('hidden', isLive());
     renderAlerts();
     renderRail();
     renderNow();
@@ -621,6 +623,7 @@
   }
 
   function renderNow() {
+    if (isLive()) { renderTurnBoard(); return; }
     var pid = phaseId();
     var hits = hitsFor(pid);
     var open = hits.filter(function (h) { return !isResolved(h); }).length;
@@ -638,7 +641,11 @@
       return;
     }
 
-    host.innerHTML = hits.map(function (h) {
+    host.innerHTML = hits.map(triggerRow).join('');
+  }
+
+  function triggerRow(h) {
+    {
       var done = isResolved(h);
       var st = stateFor(h.trigger, h.item.key, done);
       var text = st ? st.text : h.trigger.text;
@@ -664,6 +671,44 @@
           '<span class="ttext">' + Mana.render(text) + '</span>' +
         '</span>' +
       '</button>';
+    }
+  }
+
+  /**
+   * edhplay has no phases — only rounds and turn order — so walking twelve
+   * steps there is busywork. In live mode every trigger for the whole turn is
+   * shown at once, grouped by when it happens.
+   */
+  function renderTurnBoard() {
+    var groups = [];
+    var total = 0;
+    var open = 0;
+
+    D.PHASES.forEach(function (p) {
+      var hits = hitsFor(p.id);
+      if (!hits.length) { return; }
+      total += hits.length;
+      open += hits.filter(function (h) { return !isResolved(h); }).length;
+      groups.push({ phase: p, hits: hits });
+    });
+
+    $('#now-phase').textContent = state.game.myTurn ? 'Your turn' : "Opponent's turn";
+    $('#now-count').textContent = total ? open + ' of ' + total + ' left' : 'nothing this turn';
+    $('#now-count').classList.toggle('ok', total > 0 && open === 0);
+
+    var host = $('#now-list');
+    if (!groups.length) {
+      host.innerHTML = '<div class="empty small">Nothing on your board triggers ' +
+        (state.game.myTurn ? 'on your turn.' : "on an opponent's turn.") + '</div>';
+      return;
+    }
+
+    host.innerHTML = groups.map(function (g) {
+      return '<section class="step-group">' +
+        '<h3 class="step-head">' + esc(g.phase.name) +
+          '<span class="pill dim">' + g.hits.length + '</span></h3>' +
+        g.hits.map(triggerRow).join('') +
+      '</section>';
     }).join('');
   }
 

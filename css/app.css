@@ -680,3 +680,15 @@ a { color: var(--accent); }
 .alert-row b { color: #eaf1ff; }
 
 @keyframes alert-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ---------- whole-turn view (live mode) ---------- */
+
+.step-group { margin-bottom: 16px; }
+.step-head {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px; padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--accent);
+}
+.step-group .trigger { margin-bottom: 7px; }
