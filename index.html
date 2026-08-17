@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e13">
+<meta name="description" content="Paste a Commander decklist and get phase-by-phase trigger reminders at the table.">
+<title>Trigger Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Triggers">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ DECKS ============ -->
+  <section class="screen" id="screen-decks">
+    <header class="bar">
+      <div class="bar-title">
+        <h1>Trigger Tracker</h1>
+        <span class="sub">Commander trigger reminders</span>
+      </div>
+      <button class="btn ghost icon" id="btn-settings" aria-label="Settings">&#9881;</button>
+    </header>
+
+    <div class="scroll">
+      <div class="pad">
+        <div id="deck-list" class="deck-list"></div>
+
+        <div class="card import-card">
+          <h2>Add a deck</h2>
+          <p class="muted">Paste an export from Moxfield, Archidekt, MTGO, Arena or plain text. Mark your commander with <code>*CMDR*</code> or a <code>Commander:</code> header.</p>
+          <input class="input" id="deck-name" type="text" placeholder="Deck name (optional)" autocomplete="off">
+          <textarea class="input mono" id="deck-text" rows="8" spellcheck="false" placeholder="1 Atraxa, Grand Unifier *CMDR*&#10;1 Sol Ring&#10;1 Smothering Tithe&#10;1 Rhystic Study"></textarea>
+          <div class="row">
+            <button class="btn primary grow" id="btn-import">Import deck</button>
+            <button class="btn ghost" id="btn-sample">Load sample</button>
+          </div>
+          <div id="import-status" class="status hidden"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PLAY ============ -->
+  <section class="screen hidden" id="screen-play">
+    <header class="bar">
+      <button class="btn ghost icon" id="btn-back-decks" aria-label="Back to decks">&#8592;</button>
+      <div class="bar-title">
+        <h1 id="play-deck-name">Deck</h1>
+        <span class="sub" id="play-sub">Turn 1</span>
+      </div>
+      <button class="btn ghost icon" id="btn-open-sheet" aria-label="Trigger sheet">&#9776;</button>
+    </header>
+
+    <div class="turn-toggle" role="group" aria-label="Whose turn">
+      <button class="seg active" id="seg-you" data-turn="you">Your turn</button>
+      <button class="seg" id="seg-opp" data-turn="opp">Opponent's turn</button>
+      <button class="btn ghost small" id="btn-next-turn" title="End turn">End turn &#8635;</button>
+    </div>
+
+    <nav class="phase-rail" id="phase-rail" aria-label="Turn phases"></nav>
+
+    <div class="scroll" id="play-scroll">
+      <div class="pad">
+
+        <div class="now-head">
+          <h2 id="now-phase">Upkeep</h2>
+          <span class="pill" id="now-count">0 triggers</span>
+        </div>
+
+        <div id="now-list" class="trigger-list"></div>
+
+        <section class="block">
+          <button class="block-head" id="toggle-watch" aria-expanded="true">
+            <span>Watch for <span class="pill dim" id="watch-count">0</span></span>
+            <span class="chev">&#9662;</span>
+          </button>
+          <div id="watch-list" class="watch-list"></div>
+        </section>
+
+        <section class="block">
+          <button class="block-head" id="toggle-board" aria-expanded="true">
+            <span>Battlefield <span class="pill dim" id="board-count">0</span></span>
+            <span class="chev">&#9662;</span>
+          </button>
+          <div id="board-list" class="board-list"></div>
+        </section>
+
+        <div class="spacer"></div>
+      </div>
+    </div>
+
+    <div class="dock">
+      <button class="btn ghost" id="btn-prev-phase" aria-label="Previous step">&#8592;</button>
+      <button class="btn primary grow" id="btn-next-phase">Next step &#8594;</button>
+      <button class="btn accent" id="btn-add-card">+ Card</button>
+    </div>
+  </section>
+
+  <!-- ============ TRIGGER SHEET ============ -->
+  <section class="screen hidden" id="screen-sheet">
+    <header class="bar">
+      <button class="btn ghost icon" id="btn-back-play" aria-label="Back">&#8592;</button>
+      <div class="bar-title">
+        <h1>Trigger sheet</h1>
+        <span class="sub" id="sheet-sub">Every reminder in the deck</span>
+      </div>
+    </header>
+    <div class="filter-row">
+      <input class="input" id="sheet-search" type="search" placeholder="Filter cards or text" autocomplete="off">
+    </div>
+    <div class="scroll"><div class="pad" id="sheet-body"></div></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="screen hidden" id="screen-settings">
+    <header class="bar">
+      <button class="btn ghost icon" id="btn-back-settings" aria-label="Back">&#8592;</button>
+      <div class="bar-title"><h1>Settings</h1></div>
+    </header>
+    <div class="scroll"><div class="pad">
+      <div class="card">
+        <label class="switch"><input type="checkbox" id="set-nag"><span>Warn before leaving a step with unresolved triggers</span></label>
+        <label class="switch"><input type="checkbox" id="set-haptics"><span>Vibrate when a step has triggers</span></label>
+        <label class="switch"><input type="checkbox" id="set-skip"><span>Skip steps that have no triggers</span></label>
+        <label class="switch"><input type="checkbox" id="set-opp"><span>Track opponents' turns too</span></label>
+      </div>
+      <div class="card">
+        <h2>Data</h2>
+        <p class="muted">Card text is cached on this device, so the app works with no signal. <span id="cache-info"></span></p>
+        <div class="row wrap">
+          <button class="btn ghost" id="btn-export">Export backup</button>
+          <button class="btn ghost" id="btn-import-file">Import backup</button>
+          <button class="btn danger" id="btn-clear-cache">Clear card cache</button>
+        </div>
+        <input type="file" id="file-input" accept="application/json" class="hidden">
+      </div>
+      <div class="card">
+        <h2>About</h2>
+        <p class="muted">Card data from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>. Unofficial fan tool, not affiliated with or endorsed by Wizards of the Coast.</p>
+        <p class="muted" id="version-line"></p>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ============ ADD-CARD SHEET ============ -->
+  <div class="modal hidden" id="modal-add">
+    <div class="modal-panel">
+      <header class="modal-head">
+        <h2>Put a card into play</h2>
+        <button class="btn ghost icon" id="btn-close-add" aria-label="Close">&#10005;</button>
+      </header>
+      <input class="input" id="add-search" type="search" placeholder="Search your deck" autocomplete="off">
+      <div class="chip-row" id="add-filters">
+        <button class="chip active" data-filter="triggers">Has triggers</button>
+        <button class="chip" data-filter="all">All cards</button>
+      </div>
+      <div class="modal-scroll" id="add-results"></div>
+    </div>
+  </div>
+
+  <!-- ============ CARD DETAIL SHEET ============ -->
+  <div class="modal hidden" id="modal-card">
+    <div class="modal-panel">
+      <header class="modal-head">
+        <h2 id="detail-name">Card</h2>
+        <button class="btn ghost icon" id="btn-close-card" aria-label="Close">&#10005;</button>
+      </header>
+      <div class="zone-row" id="detail-zones"></div>
+      <div class="modal-scroll" id="detail-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/scryfall.js"></script>
+<script src="js/triggers.js"></script>
+<script src="js/store.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

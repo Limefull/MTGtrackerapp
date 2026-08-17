@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+
+# fetched from Scryfall on first test run
+tools/test-cards.json
+
+# local editor config
+.claude/

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Trigger Tracker">
+  <rect width="512" height="512" rx="113" fill="#0e0e13"/>
+  <!-- phase wheel: the turn you have not played yet -->
+  <circle cx="256" cy="256" r="163" fill="none" stroke="#24365c" stroke-width="82"/>
+  <!-- the part of the turn already walked through -->
+  <path d="M 256 93 A 163 163 0 0 1 371 348" fill="none" stroke="#7aa7f7" stroke-width="82"/>
+  <!-- the trigger you are about to miss -->
+  <circle cx="400" cy="151" r="40" fill="#eec06a"/>
+</svg>
