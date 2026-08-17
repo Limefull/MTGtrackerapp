@@ -628,3 +628,18 @@ a { color: var(--accent); }
 .sc-cost { display: block; margin-top: 3px; font-size: 12px; }
 .saga-chapter .sc-num { white-space: nowrap; }
 .question.escalating.spent { border-left-color: var(--border); opacity: .62; }
+
+/* ---------- dormant questions ---------- */
+
+.q-more-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; margin-top: 8px;
+  appearance: none; cursor: pointer; font: inherit; font-size: 12.5px;
+  background: transparent; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 8px;
+  padding: 9px 12px; min-height: 40px;
+}
+.q-more-toggle:hover { background: var(--bg-hover); color: var(--text); }
+.dormant-list { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
+.dormant-list .question { opacity: .55; border-left-color: var(--border); }
+.dormant-list .question:hover { opacity: .85; }

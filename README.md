@@ -37,15 +37,20 @@ you're actually playing is too much work, so the app splits the deck in two:
   creature died, someone cast a spell. You already know when that happened, so
   the app just asks.
 
-**Turn questions.** Everything not tracked becomes a short list of prompts:
+**Turn questions.** Event triggers become a short list of prompts:
 *A land entered · A creature died · A spell was cast.* Tap one when it happens
 and it names the cards that care and counts the occurrence, so a board wipe
 registers as eight Grave Pact triggers rather than one. Twenty event cards
 collapse into eight questions, and the list doesn't grow with deck size — it's
 bounded by the number of event *types*, not cards.
 
-Cards you have told the app about are highlighted inside the questions, so a
-tracked Rhystic Study shows as "1 in play" under *A spell was cast*.
+**A question only appears once one of its cards is on the battlefield.** On turn
+one, with nothing in play, the list is empty — none of those triggers could fire
+yet, so showing them would just be noise you learn to ignore. Everything else
+sits behind a *Show N questions for cards not in play* toggle, so a deck still
+works with nothing tracked at all. Cards you have tracked are highlighted inside
+their question, so a live Rhystic Study reads "1 in play" under *A spell was
+cast* — and goes quiet again the moment it dies.
 
 **A sweep before you pass.** Ending a turn opens the question list one last time
 so a missed trigger gets caught before the turn is gone. Both the questions and

@@ -38,10 +38,11 @@
   var state = Store.load();
   var analysis = {};        // card name -> analysis
   var cardsByName = {};     // lowercased name -> trimmed Scryfall card
-  var addFilter = 'tracked';
+  var addFilter = 'triggers';
   var typeFilter = 'all';
   var detailKey = null;
   var pendingAdvance = false;
+  var showDormant = false;   // questions whose cards are not on the battlefield
 
   /** Front-face type line — "Sorcery // Land" groups as a sorcery. */
   function typeGroupOf(name) {
@@ -661,16 +662,44 @@
 
     var groups = questions();
     var esc2 = escalating();
-    $('#watch-count').textContent = groups.length + esc2.length;
+
+    // A question can only matter if one of its sources is actually on the
+    // battlefield. The rest are kept behind a toggle rather than dropped, so a
+    // deck still works with nothing tracked at all.
+    var live = groups.filter(function (q) {
+      return q.hits.some(function (h) { return isOnBoard(h.name); });
+    });
+    var dormant = groups.filter(function (q) {
+      return !q.hits.some(function (h) { return isOnBoard(h.name); });
+    });
+
+    $('#watch-count').textContent = live.length + esc2.length;
 
     if (!groups.length && !esc2.length) {
       host.innerHTML = '<div class="empty small">Nothing in this deck triggers off events.</div>';
       return;
     }
 
-    host.innerHTML =
-      esc2.map(escalatingRow).join('') +
-      groups.map(function (q) { return questionRow(q, false); }).join('');
+    var html = esc2.map(escalatingRow).join('') +
+               live.map(function (q) { return questionRow(q, false); }).join('');
+
+    if (!live.length && !esc2.length) {
+      html += '<div class="empty small">Nothing you control triggers off events yet. ' +
+        'Track a card with <b>+ Card</b> and its questions appear here.</div>';
+    }
+
+    if (dormant.length) {
+      html += '<button class="q-more-toggle" id="toggle-dormant">' +
+        (showDormant ? 'Hide' : 'Show') + ' ' + dormant.length +
+        ' question' + (dormant.length === 1 ? '' : 's') + ' for cards not in play' +
+        '<span class="chev">' + (showDormant ? '&#9662;' : '&#9656;') + '</span></button>';
+      if (showDormant) {
+        html += '<div class="dormant-list">' +
+          dormant.map(function (q) { return questionRow(q, false); }).join('') + '</div>';
+      }
+    }
+
+    host.innerHTML = html;
   }
 
   /**
@@ -1375,6 +1404,11 @@
         var q = escClear.getAttribute('data-escclear').split('||');
         bumpTier(q[0], q[1], -tierCount(q[0], q[1]));
         renderPlay();
+        return;
+      }
+      if (ev.target.closest('#toggle-dormant')) {
+        showDormant = !showDormant;
+        renderWatch();
         return;
       }
       var clear = ev.target.closest('[data-clear]');
