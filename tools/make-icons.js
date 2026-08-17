@@ -79,7 +79,7 @@ function mix(a, b, t) {
 }
 
 /** A phase wheel: dim ring, bright active arc, and an alert pip. */
-function draw(size, maskable) {
+function draw(size, maskable, round) {
   var rgba = Buffer.alloc(size * size * 4);
   var c = size / 2;
   // Maskable icons get squeezed by the launcher's mask, so shrink the art.
@@ -98,7 +98,13 @@ function draw(size, maskable) {
       var i = (y * size + x) * 4;
 
       // Rounded-square background (full bleed when maskable).
-      var alpha = maskable ? 1 : roundedRectCoverage(px, py, size, corner);
+      var alpha;
+      if (maskable) { alpha = 1; }
+      else if (round) {
+        // Circular mask for ic_launcher_round.
+        var rd = Math.sqrt((px - c) * (px - c) + (py - c) * (py - c));
+        alpha = 1 - smooth(rd, size / 2 - 1, size / 2);
+      } else { alpha = roundedRectCoverage(px, py, size, corner); }
       var col = BG;
 
       var dx = px - c, dy = py - c;
@@ -163,3 +169,26 @@ fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, spec.file), png);
   console.log('wrote icons/' + spec.file + '  (' + png.length + ' bytes)');
 });
+
+/* ---------- Android launcher icons ---------- */
+
+var RES = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res');
+var DENSITIES = [
+  { dir: 'mipmap-mdpi',    size: 48 },
+  { dir: 'mipmap-hdpi',    size: 72 },
+  { dir: 'mipmap-xhdpi',   size: 96 },
+  { dir: 'mipmap-xxhdpi',  size: 144 },
+  { dir: 'mipmap-xxxhdpi', size: 192 }
+];
+
+if (fs.existsSync(path.join(__dirname, '..', 'android'))) {
+  DENSITIES.forEach(function (d) {
+    var dir = path.join(RES, d.dir);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'ic_launcher.png'),
+      encodePNG(d.size, d.size, draw(d.size, false)));
+    fs.writeFileSync(path.join(dir, 'ic_launcher_round.png'),
+      encodePNG(d.size, d.size, draw(d.size, false, true)));
+    console.log('wrote ' + d.dir + '/ic_launcher*.png  (' + d.size + 'px)');
+  });
+}

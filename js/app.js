@@ -1419,7 +1419,10 @@
       showScreen('screen-decks');
     }
 
-    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    // Inside the Android APK every file is already local, so the service
+    // worker would only add a staler second cache.
+    var packaged = location.hostname === 'appassets.androidplatform.net';
+    if ('serviceWorker' in navigator && !packaged && location.protocol.indexOf('http') === 0) {
       navigator.serviceWorker.register('sw.js').catch(function () { /* offline mode unavailable */ });
     }
   }

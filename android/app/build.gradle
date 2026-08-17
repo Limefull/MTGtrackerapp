@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.triggertracker'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "app.triggertracker"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        debug {
+            // Debug builds are signed with Gradle's throwaway debug key, which
+            // is all a sideloaded personal build needs.
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Serves the bundled assets over a real https origin so localStorage,
+    // fetch and CORS behave exactly as they do in a browser.
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

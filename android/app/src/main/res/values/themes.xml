@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark window background so launching does not flash white. -->
+    <style name="AppTheme" parent="@android:style/Theme.NoTitleBar">
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:statusBarColor">@color/app_bg</item>
+        <item name="android:navigationBarColor">@color/app_bg</item>
+    </style>
+</resources>

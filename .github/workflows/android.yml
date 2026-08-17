@@ -1,0 +1,48 @@
+name: Build Android APK
+
+# Runs on every push so the latest APK is always one download away, and can be
+# started by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Bundle the web app into the APK assets
+        run: node tools/build-assets.js
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Name the APK after the run
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "out/trigger-tracker-${GITHUB_RUN_NUMBER}.apk"
+          ls -lh out
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: trigger-tracker-apk
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 90

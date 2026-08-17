@@ -8,3 +8,11 @@ tools/test-cards.json
 
 # local editor config
 .claude/
+
+# Android build output (the APK is produced by CI, not committed)
+android/app/src/main/assets/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+out/
