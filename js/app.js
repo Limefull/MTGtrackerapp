@@ -1185,7 +1185,13 @@
           Object.keys(liveSnapshot.zoneCounts || {}).join(', ') + '.';
       }
     }
-    $('#version-line').textContent = 'Version ' + VERSION;
+    var build = VERSION;
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
+        build = chrome.runtime.getManifest().version + ' (extension)';
+      }
+    } catch (e) { /* not an extension */ }
+    $('#version-line').textContent = 'Version ' + build;
   }
 
   /* ---------------- event wiring ---------------- */
