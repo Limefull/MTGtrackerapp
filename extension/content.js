@@ -11,6 +11,11 @@
 (function () {
   'use strict';
 
+  // The script is both declared in the manifest and injected on demand, so it
+  // can arrive twice on the same page. Only the first copy should observe.
+  if (window.__mtgTriggerTrackerReader) { return; }
+  window.__mtgTriggerTrackerReader = true;
+
   var STORAGE_KEY = 'edhplayBoard';
   var SCRYFALL_ID = /cards\.scryfall\.io\/.*?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
   var DEBOUNCE_MS = 400;

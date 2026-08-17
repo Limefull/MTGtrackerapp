@@ -1,15 +1,19 @@
 {
   "manifest_version": 3,
   "name": "MTG Trigger Tracker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Phase-by-phase Magic trigger reminders in a side panel, beside your game on edhplay.com or at the table.",
   "permissions": [
     "sidePanel",
-    "storage"
+    "storage",
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://api.scryfall.com/*",
-    "https://cards.scryfall.io/*"
+    "https://cards.scryfall.io/*",
+    "https://edhplay.com/*",
+    "https://*.edhplay.com/*"
   ],
   "background": {
     "service_worker": "service-worker.js"

@@ -37,5 +37,25 @@
     return true;
   }
 
-  global.MTGBridge = { available: available, subscribe: subscribe };
+  /**
+   * Ask the service worker to inject the board reader into open edhplay tabs.
+   * @param {function(Object|null)} done receives the injection report
+   */
+  function ensureInjected(done) {
+    if (!available) { done(null); return; }
+    try {
+      chrome.runtime.sendMessage({ type: 'ENSURE_INJECTED' }, function (report) {
+        if (chrome.runtime.lastError) { done(null); return; }
+        done(report || null);
+      });
+    } catch (e) {
+      done(null);
+    }
+  }
+
+  global.MTGBridge = {
+    available: available,
+    subscribe: subscribe,
+    ensureInjected: ensureInjected
+  };
 })(window);

@@ -424,6 +424,14 @@
   /* ---------------- rendering: decks ---------------- */
 
   function renderDecks() {
+    // In the extension the board arrives on its own, so do not lead with a
+    // decklist form the player is not supposed to need.
+    var waiting = $('#waiting-note');
+    if (waiting) {
+      var extension = !!(global.MTGBridge && global.MTGBridge.available);
+      waiting.classList.toggle('hidden', !extension || !!liveSnapshot);
+    }
+
     var host = $('#deck-list');
     if (!state.decks.length) {
       host.innerHTML = '<div class="empty">No decks yet. Paste a list below to get started.</div>';
@@ -1178,7 +1186,17 @@
       if (!(global.MTGBridge && global.MTGBridge.available)) {
         live.textContent = 'Board reading is only available in the Chrome extension.';
       } else if (!liveSnapshot) {
-        live.textContent = 'No board seen yet. Open a game on edhplay.com in another tab.';
+        live.textContent = 'No board seen yet — checking open tabs...';
+        global.MTGBridge.ensureInjected(function (report) {
+          if (!report) { live.textContent = 'No board seen yet, and the reader could not be started.'; return; }
+          if (!report.tabs) {
+            live.textContent = 'No edhplay tab is open in this window set. Open your game, then reopen this panel.';
+          } else {
+            live.textContent = 'Found ' + report.tabs + ' edhplay tab(s), started the reader on ' +
+              report.injected + '. If the board still does not appear, the page markup has changed.' +
+              (report.errors.length ? ' Errors: ' + report.errors.join('; ') : '');
+          }
+        });
       } else {
         live.textContent = 'Last board: ' + (liveSnapshot.cards || []).length + ' identified card(s), ' +
           snapshotPlayers(liveSnapshot).length + ' player(s), zones seen: ' +
@@ -1632,6 +1650,9 @@
     bind();
     renderDecks();
     startBoardBridge();
+    if (global.MTGBridge && global.MTGBridge.available) {
+      global.MTGBridge.ensureInjected(function () { /* report shown in settings */ });
+    }
 
     if (state.game && deckById(state.game.deckId)) {
       hydrate(deckById(state.game.deckId));
