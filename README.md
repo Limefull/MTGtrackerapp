@@ -31,6 +31,12 @@ shows only what's live during someone else's turn.
 pinned to a step, so they sit in an always-visible panel, grouped by what sets
 them off.
 
+**A visual card picker.** Putting a permanent into play means picking it off a
+grid of real card images pulled from Scryfall, split into Creatures, Instants,
+Sorceries, Artifacts, Enchantments, Planeswalkers, Battles and Lands. Each tile
+carries a badge with its reminder count, and cards already on the board are
+greyed out. Type chips and a search box narrow it down when the deck is large.
+
 **Zone tracking.** Move a card between battlefield, graveyard, exile, hand and the
 command zone. Graveyard abilities (flashback, escape, disturb, unearth) surface
 once the card is actually in the yard.
@@ -103,7 +109,10 @@ It then launches full-screen and runs offline.
 ## How the trigger detection works
 
 Card text comes from the [Scryfall](https://scryfall.com) API and is cached in
-`localStorage`, so a deck is fetched once and then works offline forever.
+`localStorage`, so a deck is fetched once and then works offline forever. Card
+images are kept as URLs rather than data, in two sizes — `small` for the picker
+grid, `normal` for the detail view — and the service worker caches each one the
+first time it's shown, so the art is there offline too.
 
 Each ability line is stripped of reminder text, the card's own name is replaced
 with `~`, and the line is matched against rule tables in

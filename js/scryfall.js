@@ -7,7 +7,7 @@
   var API = 'https://api.scryfall.com/cards/collection';
   var BATCH = 75;          // Scryfall's documented maximum per request
   var GAP_MS = 120;        // stay under the 10 req/s rate limit
-  var CACHE_KEY = 'mtgtracker.cards.v1';
+  var CACHE_KEY = 'mtgtracker.cards.v2';
 
   var cache = null;
 
@@ -35,7 +35,8 @@
     return String(name).toLowerCase().trim();
   }
 
-  /** Keep only what the app needs — full Scryfall objects blow the storage quota. */
+  /** Keep only what the app needs — full Scryfall objects blow the storage quota.
+      Two image sizes: "small" for the picker grid, "normal" for the detail view. */
   function trim(card) {
     var faces = (card.card_faces || []).map(function (f) {
       return {
@@ -43,6 +44,7 @@
         type_line: f.type_line || '',
         oracle_text: f.oracle_text || '',
         mana_cost: f.mana_cost || '',
+        thumb: (f.image_uris && f.image_uris.small) || '',
         image: (f.image_uris && (f.image_uris.normal || f.image_uris.small)) || ''
       };
     });
@@ -56,6 +58,7 @@
       keywords: card.keywords || [],
       layout: card.layout || 'normal',
       faces: faces,
+      thumb: (card.image_uris && card.image_uris.small) || (faces[0] && faces[0].thumb) || '',
       image: (card.image_uris && (card.image_uris.normal || card.image_uris.small)) ||
              (faces[0] && faces[0].image) || '',
       scryfall_uri: card.scryfall_uri || ''

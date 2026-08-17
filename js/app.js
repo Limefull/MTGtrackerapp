@@ -20,12 +20,38 @@
   // Steps the app is allowed to fast-forward through when they are empty.
   var SKIPPABLE = { untap: 1, upkeep: 1, draw: 1, combat: 1, block: 1, damage: 1, endcombat: 1, cleanup: 1 };
 
+  // Card-type buckets for the picker, in display order. The first match wins,
+  // so an artifact creature files under Creatures rather than Artifacts.
+  var TYPE_GROUPS = [
+    { id: 'creature',     label: 'Creatures',     re: /\bCreature\b/ },
+    { id: 'planeswalker', label: 'Planeswalkers', re: /\bPlaneswalker\b/ },
+    { id: 'instant',      label: 'Instants',      re: /\bInstant\b/ },
+    { id: 'sorcery',      label: 'Sorceries',     re: /\bSorcery\b/ },
+    { id: 'artifact',     label: 'Artifacts',     re: /\bArtifact\b/ },
+    { id: 'enchantment',  label: 'Enchantments',  re: /\bEnchantment\b/ },
+    { id: 'battle',       label: 'Battles',       re: /\bBattle\b/ },
+    { id: 'land',         label: 'Lands',         re: /\bLand\b/ },
+    { id: 'other',        label: 'Other',         re: /./ }
+  ];
+
   var state = Store.load();
   var analysis = {};        // card name -> analysis
   var cardsByName = {};     // lowercased name -> trimmed Scryfall card
   var addFilter = 'triggers';
+  var typeFilter = 'all';
   var detailKey = null;
   var pendingAdvance = false;
+
+  /** Front-face type line — "Sorcery // Land" groups as a sorcery. */
+  function typeGroupOf(name) {
+    var card = cardsByName[String(name).toLowerCase()];
+    var line = card ? (card.type_line || '') : '';
+    line = line.split('//')[0];
+    for (var i = 0; i < TYPE_GROUPS.length; i++) {
+      if (TYPE_GROUPS[i].re.test(line)) { return TYPE_GROUPS[i]; }
+    }
+    return TYPE_GROUPS[TYPE_GROUPS.length - 1];
+  }
 
   /* ---------------- utilities ---------------- */
 
@@ -490,27 +516,72 @@
       return true;
     });
 
-    rows.sort(function (a, b) { return triggerCount(b.name) - triggerCount(a.name) || a.name.localeCompare(b.name); });
+    // Bucket by type before applying the type filter, so the chips always show
+    // what is actually reachable from here.
+    var buckets = {};
+    rows.forEach(function (e) {
+      var g = typeGroupOf(e.name);
+      (buckets[g.id] = buckets[g.id] || []).push(e);
+    });
+
+    var present = TYPE_GROUPS.filter(function (g) { return buckets[g.id]; });
+    if (typeFilter !== 'all' && !buckets[typeFilter]) { typeFilter = 'all'; }
+
+    $('#add-types').innerHTML = present.length < 2 ? '' :
+      ['<button class="chip' + (typeFilter === 'all' ? ' active' : '') + '" data-type="all">All ' +
+        '<span class="pill dim">' + rows.length + '</span></button>']
+      .concat(present.map(function (g) {
+        return '<button class="chip' + (typeFilter === g.id ? ' active' : '') + '" data-type="' + g.id + '">' +
+          esc(g.label) + ' <span class="pill dim">' + buckets[g.id].length + '</span></button>';
+      })).join('');
 
     var host = $('#add-results');
     if (!rows.length) {
       host.innerHTML = '<div class="empty small">Nothing matches.</div>';
       return;
     }
-    host.innerHTML = rows.map(function (e) {
-      var free = freeInstance(e);
-      var n = triggerCount(e.name);
-      var card = cardsByName[e.name.toLowerCase()];
-      var type = card ? (card.type_line || '').split('—')[0].trim() : '';
-      return '<button class="add-row' + (free ? '' : ' out') + '" data-add="' + esc(e.name) + '"' +
-        (free ? '' : ' disabled') + '>' +
-        '<span class="ar-main">' +
-          '<span class="ar-name">' + esc(e.name) + '</span>' +
-          '<span class="muted">' + esc(type) + (e.qty > 1 ? ' · ' + e.qty + ' copies' : '') + '</span>' +
-        '</span>' +
-        (n ? '<span class="pill">' + n + '</span>' : '<span class="pill dim">0</span>') +
-      '</button>';
+
+    var shown = present.filter(function (g) { return typeFilter === 'all' || g.id === typeFilter; });
+
+    host.innerHTML = shown.map(function (g) {
+      var list = buckets[g.id].slice().sort(function (a, b) {
+        return triggerCount(b.name) - triggerCount(a.name) || a.name.localeCompare(b.name);
+      });
+      return '<section class="type-section">' +
+        '<h4 class="type-head">' + esc(g.label) + '<span class="pill dim">' + list.length + '</span></h4>' +
+        '<div class="card-grid">' + list.map(cardTile).join('') + '</div>' +
+      '</section>';
     }).join('');
+  }
+
+  function cardTile(entry) {
+    var free = freeInstance(entry);
+    var n = triggerCount(entry.name);
+    var card = cardsByName[entry.name.toLowerCase()];
+    var src = card && (card.thumb || card.image);
+    var left = countAvailable(entry);
+
+    return '<button class="card-tile' + (free ? '' : ' out') + '" data-add="' + esc(entry.name) + '"' +
+      (free ? '' : ' disabled') + ' title="' + esc(entry.name) + '">' +
+      '<span class="ct-img">' +
+        (src
+          ? '<img src="' + esc(src) + '" alt="" loading="lazy" decoding="async">'
+          : '<span class="ct-fallback">' + esc(entry.name) + '</span>') +
+      '</span>' +
+      (n ? '<span class="ct-badge" title="' + n + ' reminders">' + n + '</span>' : '') +
+      (entry.qty > 1 && left > 0 ? '<span class="ct-qty">&times;' + left + '</span>' : '') +
+      (free ? '' : '<span class="ct-out">all in play</span>') +
+      '<span class="ct-name">' + esc(entry.name) + '</span>' +
+    '</button>';
+  }
+
+  /** Copies of this entry still sitting in the library. */
+  function countAvailable(entry) {
+    var free = 0;
+    for (var i = 0; i < entry.qty; i++) {
+      if (zoneOf(instKey(entry.name, i)) === 'deck') { free++; }
+    }
+    return free;
   }
 
   function addToBattlefield(name) {
@@ -523,7 +594,13 @@
     setZone(key, 'battlefield');
     buzz(18);
     renderPlay();
+
+    // Re-rendering the grid would throw away the user's place in it.
+    var results = $('#add-results');
+    var top = results.scrollTop;
     renderAdd();
+    results.scrollTop = top;
+
     toast(name + ' → battlefield');
   }
 
@@ -556,8 +633,12 @@
 
     var html = '';
     if (card) {
-      html += '<div class="detail-type">' + esc(card.type_line || '') +
-              (card.mana_cost ? '<span class="muted"> ' + esc(card.mana_cost) + '</span>' : '') + '</div>';
+      var art = card.image || card.thumb;
+      html += '<div class="detail-top">' +
+        (art ? '<img class="detail-art" src="' + esc(art) + '" alt="" loading="lazy" decoding="async">' : '') +
+        '<div class="detail-type">' + esc(card.type_line || '') +
+          (card.mana_cost ? '<span class="muted"> ' + esc(card.mana_cost) + '</span>' : '') + '</div>' +
+      '</div>';
     }
 
     if (a && a.triggers.length) {
@@ -779,6 +860,13 @@
       addFilter = chip.getAttribute('data-filter');
       $$('#add-filters .chip').forEach(function (c) { c.classList.toggle('active', c === chip); });
       renderAdd();
+    });
+    $('#add-types').addEventListener('click', function (ev) {
+      var chip = ev.target.closest('[data-type]');
+      if (!chip) { return; }
+      typeFilter = chip.getAttribute('data-type');
+      renderAdd();
+      $('#add-results').scrollTop = 0;
     });
     $('#add-results').addEventListener('click', function (ev) {
       var row = ev.target.closest('[data-add]');
