@@ -1477,6 +1477,35 @@
     bindToggle('#set-sweep', 'endTurnSweep');
     bindToggle('#set-autotrack', 'autoTrack');
 
+    $('#btn-copy-diag').addEventListener('click', function () {
+      var report = {
+        version: (function () {
+          try { return chrome.runtime.getManifest().version; } catch (e) { return VERSION; }
+        })(),
+        extension: !!(global.MTGBridge && global.MTGBridge.available),
+        snapshot: liveSnapshot || null
+      };
+      var text = JSON.stringify(report, null, 2);
+
+      // Always show it as well: a side panel can lose clipboard permission and
+      // then the button would look like it did nothing.
+      var box = $('#diag-dump');
+      box.value = text;
+      box.classList.remove('hidden');
+      box.focus();
+      box.select();
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          toast('Diagnostics copied — paste them to me.');
+        }, function () {
+          toast('Could not copy automatically — the text below is selected.');
+        });
+      } else {
+        toast('Select the text below and copy it.');
+      }
+    });
+
     $('#btn-clear-cache').addEventListener('click', function () {
       if (!confirm('Clear cached card text? You will need a connection to reload it.')) { return; }
       Scry.clearCache();

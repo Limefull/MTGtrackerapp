@@ -154,6 +154,10 @@
         </div>
         <input type="file" id="file-input" accept="application/json" class="hidden">
         <p class="muted" id="live-info"></p>
+        <div class="row wrap">
+          <button class="btn ghost" id="btn-copy-diag">Copy board diagnostics</button>
+        </div>
+        <textarea class="input mono hidden" id="diag-dump" rows="6" readonly></textarea>
         <p class="muted">If a board is not being read, check the line above and that the tab is on <code>edhplay.com</code>.</p>
       </div>
       <div class="card">

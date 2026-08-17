@@ -127,6 +127,41 @@
     return best;
   }
 
+  /**
+   * Raw evidence about how this page marks seats, turns and phases. Carried on
+   * the snapshot so the panel can report it without anyone opening DevTools.
+   */
+  function diagnostics() {
+    var seats = [];
+    document.querySelectorAll('[data-player-board-id], [data-player-id], [data-zone-player-id]')
+      .forEach(function (el) {
+        var text = (el.textContent || '').trim();
+        if (text.length > 200 || !/(turn|you)/i.test(text)) { return; }
+        seats.push({
+          player: playerIdOf(el),
+          text: text.slice(0, 60),
+          state: el.getAttribute('data-state'),
+          cls: String(el.className).slice(0, 50)
+        });
+      });
+
+    var aria = null;
+    document.querySelectorAll('[aria-label]').forEach(function (el) {
+      var a = el.getAttribute('aria-label') || '';
+      if (/rounds*d|pass turn/i.test(a)) { aria = a; }
+    });
+
+    var phases = [];
+    var words = /(untap|upkeep|main phase|combat|end step|cleanup|priority)/i;
+    document.querySelectorAll('p, span, div, button').forEach(function (el) {
+      if (el.children.length || phases.length >= 5) { return; }
+      var t = (el.textContent || '').trim();
+      if (t && t.length < 60 && words.test(t)) { phases.push(t); }
+    });
+
+    return { seats: seats.slice(0, 8), turnAria: aria, phaseWords: phases };
+  }
+
   function snapshot() {
     var cards = readCards();
     var self = findSelf(cards);
@@ -143,7 +178,8 @@
       cards: cards.filter(function (c) { return c.scryfallId; }),
       // Kept for diagnostics: if the page ever renames a zone this shows it.
       zoneCounts: zones,
-      totalCardEls: cards.length
+      totalCardEls: cards.length,
+      diag: diagnostics()
     };
   }
 
