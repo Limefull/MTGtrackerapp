@@ -596,6 +596,7 @@
     // would set them by hand is hidden rather than left to silently revert.
     $('#btn-add-card').classList.toggle('hidden', isLive());
     $('.turn-toggle').classList.toggle('hidden', isLive());
+    renderAlerts();
     renderRail();
     renderNow();
     renderWatch();
@@ -1625,11 +1626,158 @@
       state.game.zones = zones;
 
       followGameTurn(snap, me);
+      reactToChanges(mine, names);
 
       persist();
       if ($('#screen-decks').classList.contains('hidden') === false) { showScreen('screen-play'); }
       renderPlay();
     });
+  }
+
+  /* ---------------- watching the board change ----------------
+     Two readings of the board are enough to know what just happened, so the
+     player never has to tell the app that a land entered or a creature died. */
+
+  var prevZones = null;      // cardId -> { zone, name }
+  var alerts = [];           // most recent first
+  var ALERT_LIFE_MS = 45000;
+  var ALERT_MAX = 5;
+
+  function typeOf(name) {
+    var card = cardsByName[String(name).toLowerCase()];
+    return card ? (card.type_line || '').split('//')[0] : '';
+  }
+
+  function reactToChanges(mine, names) {
+    var now = {};
+    mine.forEach(function (c) {
+      var name = names[String(c.scryfallId).toLowerCase()];
+      if (name) { now[c.cardId] = { zone: EDH_ZONES[c.zone], name: name }; }
+    });
+
+    // The first reading is the starting position, not a set of events.
+    if (!prevZones) { prevZones = now; return; }
+
+    var entered = [];
+    var died = [];
+
+    Object.keys(now).forEach(function (id) {
+      var before = prevZones[id];
+      var after = now[id];
+      if (!before) {
+        if (after.zone === 'battlefield') { entered.push(after.name); }
+      } else if (before.zone !== after.zone) {
+        if (after.zone === 'battlefield') { entered.push(after.name); }
+        else if (before.zone === 'battlefield' && after.zone === 'graveyard') { died.push(after.name); }
+      }
+    });
+    Object.keys(prevZones).forEach(function (id) {
+      if (!now[id] && prevZones[id].zone === 'battlefield') { died.push(prevZones[id].name); }
+    });
+
+    prevZones = now;
+    if (!entered.length && !died.length) { return; }
+
+    var fired = [];
+    entered.forEach(function (name) {
+      fired.push({ headline: name + ' entered the battlefield',
+                   own: ownTriggers(name, 'etb_self'),
+                   others: othersTriggers('etb_other', name) });
+      if (/Token/.test(typeOf(name))) { countEvent('token'); }
+      if (/\bLand\b/.test(typeOf(name))) {
+        countEvent('landfall');
+        fired.push({ headline: 'Landfall — ' + name,
+                     own: [], others: othersTriggers('landfall', name) });
+      }
+      countEvent('etb_other');
+    });
+    died.forEach(function (name) {
+      fired.push({ headline: name + ' died',
+                   own: ownTriggers(name, 'dies_self'),
+                   others: othersTriggers('dies_other', name) });
+      if (/\bCreature\b/.test(typeOf(name))) { countEvent('dies_other'); }
+    });
+
+    // Only worth interrupting for if something actually triggers.
+    var useful = fired.filter(function (f) { return f.own.length || f.others.length; });
+    if (!useful.length) { return; }
+
+    var stamp = Date.now();
+    useful.forEach(function (f) { f.at = stamp; alerts.unshift(f); });
+    alerts = alerts.slice(0, ALERT_MAX);
+    buzz([30, 40, 30]);
+  }
+
+  /** Triggers on the card itself for a given event. */
+  function ownTriggers(name, event) {
+    var a = analysis[name];
+    if (!a) { return []; }
+    return a.triggers.filter(function (t) { return t.event === event; })
+      .map(function (t) { return { name: name, text: t.text }; });
+  }
+
+  var SUBJECT_TYPES = ['creature', 'artifact', 'enchantment', 'land', 'planeswalker', 'battle'];
+
+  /**
+   * Does a trigger that watches for something entering or dying actually care
+   * about *this* card? Only the condition is examined — Aura Shards destroys an
+   * artifact or enchantment, but it triggers on creatures.
+   */
+  function triggerAppliesTo(triggerText, typeLine) {
+    var clause = String(triggerText).split(',')[0].toLowerCase();
+    var wanted = SUBJECT_TYPES.filter(function (t) {
+      return new RegExp('\\b' + t + 's?\\b').test(clause);
+    });
+    if (!wanted.length) { return true; }        // "permanent", or unspecified
+    var types = String(typeLine).toLowerCase();
+    return wanted.some(function (t) { return types.indexOf(t) !== -1; });
+  }
+
+  /** Triggers on everything else you control that watch for this event. */
+  function othersTriggers(event, subjectName) {
+    var typeLine = typeOf(subjectName);
+    var out = [];
+    activeBoard().forEach(function (it) {
+      if (it.name === subjectName || it.zone !== 'battlefield' || !it.analysis) { return; }
+      it.analysis.triggers.forEach(function (t) {
+        if (t.type !== 'event' || t.event !== event) { return; }
+        if (!triggerAppliesTo(t.text, typeLine)) { return; }
+        out.push({ name: it.name, text: t.text });
+      });
+    });
+    return out;
+  }
+
+  /** Roll the matching turn question forward, since we saw it happen. */
+  function countEvent(eventId) {
+    var g = state.game;
+    if (!g) { return; }
+    g.answers = g.answers || {};
+    g.answers[eventId] = (g.answers[eventId] || 0) + 1;
+  }
+
+  function liveAlerts() {
+    var cutoff = Date.now() - ALERT_LIFE_MS;
+    alerts = alerts.filter(function (a) { return a.at > cutoff; });
+    return alerts;
+  }
+
+  function renderAlerts() {
+    var host = $('#alert-strip');
+    if (!host) { return; }
+    var list = liveAlerts();
+    if (!list.length) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+
+    host.classList.remove('hidden');
+    host.innerHTML = list.map(function (a) {
+      var rows = a.own.concat(a.others);
+      return '<div class="alert">' +
+        '<div class="alert-head">' + esc(a.headline) + '</div>' +
+        rows.map(function (r) {
+          return '<div class="alert-row"><b>' + esc(r.name) + '</b> ' + Mana.render(r.text) + '</div>';
+        }).join('') +
+      '</div>';
+    }).join('');
   }
 
   /**
@@ -1699,12 +1847,23 @@
     isLive: isLive
   };
 
+  var alertTimer = null;
+  function keepAlertsFresh() {
+    clearInterval(alertTimer);
+    alertTimer = setInterval(function () {
+      if (!alerts.length) { return; }
+      var before = alerts.length;
+      if (liveAlerts().length !== before) { renderAlerts(); }
+    }, 5000);
+  }
+
   /* ---------------- boot ---------------- */
 
   function init() {
     bind();
     renderDecks();
     startBoardBridge();
+    keepAlertsFresh();
     if (global.MTGBridge && global.MTGBridge.available) {
       global.MTGBridge.ensureInjected(function () { /* report shown in settings */ });
     }

@@ -213,6 +213,17 @@ matching is exact rather than name-guessing.
 It follows the game's own turn too: pass on edhplay and the panel flips to
 *Opponent's turn* by itself, and the turn counter tracks the table's.
 
+**It tells you, rather than waiting to be asked.** Two readings of the board are
+enough to know what just happened, so the panel watches for it. Play a land and
+a **Landfall** card appears naming every payoff you control. Play a creature and
+its enter-the-battlefield trigger shows up next to everything else that cares.
+Lose one and its death trigger appears alongside your sacrifice payoffs. The
+matching turn question is counted for you at the same time, so a board wipe
+registers every death without a single tap.
+
+Alerts are type-checked before they fire: Aura Shards watches for creatures, so
+playing a land does not summon it. They fade after about a minute.
+
 The split of responsibility is deliberate: **edhplay owns the turn and the
 board, the panel owns the step.** So in live mode the turn switch, the *End
 turn* button and **+ Card** are hidden rather than left to be pressed and
