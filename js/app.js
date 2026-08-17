@@ -1761,7 +1761,7 @@
       fired.push({ headline: name + ' entered the battlefield',
                    own: ownTriggers(name, 'etb_self'),
                    others: othersTriggers('etb_other', name) });
-      if (/Token/.test(typeOf(name))) { countEvent('token'); }
+      if (/\bToken\b/.test(typeOf(name))) { countEvent('token'); }
       if (/\bLand\b/.test(typeOf(name))) {
         countEvent('landfall');
         fired.push({ headline: 'Landfall — ' + name,
@@ -1865,13 +1865,16 @@
   function followGameTurn(snap, me) {
     var g = state.game;
 
-    if (snap.activePlayer) {
-      var mine = snap.activePlayer === me;
-      if (g.myTurn !== mine) {
-        g.myTurn = mine;
-        // A new player's turn starts at the top of the turn.
-        g.phaseIndex = 0;
-      }
+    // The page answers this directly now: the turn readout only offers "pass
+    // turn" on your own turn. activePlayer is the older id-based fallback.
+    var mine = null;
+    if (typeof snap.myTurn === 'boolean') { mine = snap.myTurn; }
+    else if (snap.activePlayer) { mine = snap.activePlayer === me; }
+
+    if (mine !== null && g.myTurn !== mine) {
+      g.myTurn = mine;
+      // A new player's turn starts at the top of the turn.
+      g.phaseIndex = 0;
     }
 
     if (typeof snap.turn === 'number' && snap.turn > 0 && snap.turn !== g.turn) {
@@ -1906,9 +1909,14 @@
     }
 
     var tracked = activeBoard().length;
-    var whose = liveSnapshot.activePlayer
-      ? (liveSnapshot.activePlayer === me ? ' · your turn' : " · opponent's turn")
-      : '';
+    var whose = '';
+    if (typeof liveSnapshot.myTurn === 'boolean') {
+      whose = liveSnapshot.myTurn
+        ? ' · your turn'
+        : ' · ' + (liveSnapshot.activeSeat ? esc(liveSnapshot.activeSeat) + "'s turn" : "opponent's turn");
+    } else if (liveSnapshot.activePlayer) {
+      whose = liveSnapshot.activePlayer === me ? ' · your turn' : " · opponent's turn";
+    }
     bar.innerHTML = '<span class="live-dot"></span>' +
       '<span class="live-text">edhplay · ' + tracked + ' card' +
       (tracked === 1 ? '' : 's') + whose + '</span>' +

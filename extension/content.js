@@ -2,11 +2,17 @@
    Read-only: nothing is clicked, changed or sent anywhere except into this
    extension's own storage, which the panel reads back.
 
-   The page marks every card with the attributes we need:
-     [data-zone]            hand | battlefield | graveyard | library | exile ...
+   Everything here was checked against a real multiplayer game rather than
+   guessed. The page marks every card with:
+     [data-zone]            hand | battlefield | graveyard | library | commandZone
      [data-card-id]         the game's own id for that copy
      [data-player-id]       whose card it is
-     and an <img> whose Scryfall URL carries the card's Scryfall UUID. */
+     and an <img> whose Scryfall URL carries the card's Scryfall UUID.
+
+   Seats are tooltip triggers labelled "Click to focus: <name>", carrying a
+   "Turn" badge when it is their turn and a "You" badge on your own seat. They
+   hold no player id, which is why whose-turn-it-is is worked out from the
+   badges and from the pass-turn affordance rather than from ids. */
 
 (function () {
   'use strict';
@@ -18,7 +24,12 @@
 
   var STORAGE_KEY = 'edhplayBoard';
   var SCRYFALL_ID = /cards\.scryfall\.io\/.*?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  var SEAT_LABEL = /^click to focus:\s*(.+)$/i;
+  var ROUND_LABEL = /\bround\s*(\d{1,3})\b/i;
+  var PASS_TURN = /click to pass turn/i;
   var DEBOUNCE_MS = 400;
+
+  /* ---------- cards ---------- */
 
   function scryfallIdFrom(el) {
     var img = el.querySelector('img[src*="cards.scryfall.io"]');
@@ -66,162 +77,117 @@
     return boards.length === 1 ? boards[0].getAttribute('data-player-board-id') : null;
   }
 
-  function playerIdOf(el) {
-    return el.getAttribute('data-player-id') ||
-           el.getAttribute('data-player-board-id') ||
-           el.getAttribute('data-zone-player-id') || null;
+  /* ---------- seats and turn ---------- */
+
+  function isVisible(el) {
+    if (!el.offsetWidth && !el.offsetHeight && !el.getClientRects().length) { return false; }
+    var style = window.getComputedStyle(el);
+    if (!style) { return true; }
+    return style.visibility !== 'hidden' &&
+           style.display !== 'none' &&
+           parseFloat(style.opacity || '1') > 0.05;
   }
 
   /**
-   * The turn counter. The pass-turn button spells it out — "Round 3 - Click to
-   * pass turn" — which is far steadier than scraping the visible text.
+   * Every seat, with the badges that are actually on screen. The inactive seat
+   * still carries a "Turn" element in the markup, so visibility is what
+   * separates the player whose turn it is from everyone else.
    */
-  function readTurn() {
-    var labelled = document.querySelectorAll('[aria-label]');
-    for (var a = 0; a < labelled.length; a++) {
-      var label = labelled[a].getAttribute('aria-label') || '';
-      var round = /rounds*(d{1,3})/i.exec(label);
-      if (round) { return parseInt(round[1], 10); }
-    }
-    return readTurnFromText();
+  function readSeats() {
+    var seats = [];
+    document.querySelectorAll('[aria-label]').forEach(function (el) {
+      var m = SEAT_LABEL.exec((el.getAttribute('aria-label') || '').trim());
+      if (!m) { return; }
+
+      var hasTurn = false;
+      var isYou = false;
+      el.querySelectorAll('span, p, div, small, b, strong').forEach(function (node) {
+        if (node.children.length) { return; }
+        var text = (node.textContent || '').trim();
+        if (!/^(turn|you)$/i.test(text) || !isVisible(node)) { return; }
+        if (/^turn$/i.test(text)) { hasTurn = true; } else { isYou = true; }
+      });
+
+      seats.push({ name: m[1].trim(), hasTurn: hasTurn, isYou: isYou });
+    });
+    return seats;
   }
 
-  function readTurnFromText() {
-    var nodes = document.querySelectorAll('p, span, div');
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (el.children.length || !/^turn$/i.test((el.textContent || '').trim())) { continue; }
-      var box = el.parentElement;
-      if (!box) { continue; }
-      var m = /(d{1,3})/.exec((box.textContent || '').replace(/turn/i, ''));
+  /** The round number, straight off the turn readout's own label. */
+  function readTurn() {
+    var labelled = document.querySelectorAll('[aria-label]');
+    for (var i = 0; i < labelled.length; i++) {
+      var m = ROUND_LABEL.exec(labelled[i].getAttribute('aria-label') || '');
       if (m) { return parseInt(m[1], 10); }
     }
     return null;
   }
 
   /**
-   * Whoever the page is showing as having the turn. Class names are build
-   * hashes, so this leans on the badge text and on explicit state attributes.
+   * Is it your turn?
+   * The turn readout only offers "Click to pass turn" when the turn is yours,
+   * which is the clearest signal the page gives. Seat badges are the fallback.
+   * @returns {boolean|null} null when the page says neither way
    */
-  function readActivePlayer() {
-    var flagged = document.querySelector(
-      '[data-player-id][data-state="active"], [data-player-board-id][data-state="active"]');
-    if (flagged) { return playerIdOf(flagged); }
-
-    var owners = document.querySelectorAll('[data-player-id], [data-player-board-id], [data-zone-player-id]');
-    var best = null;
-    var bestLen = Infinity;
-    for (var i = 0; i < owners.length; i++) {
-      var el = owners[i];
-      var text = (el.textContent || '').trim();
-      // Smallest container that mentions the turn badge wins, so the whole
-      // board does not match just because the counter sits inside it.
-      if (text.length < 160 && text.length < bestLen && /turn/i.test(text) && playerIdOf(el)) {
-        best = playerIdOf(el);
-        bestLen = text.length;
-      }
+  function readMyTurn(seats) {
+    var labelled = document.querySelectorAll('[aria-label]');
+    for (var i = 0; i < labelled.length; i++) {
+      var label = labelled[i].getAttribute('aria-label') || '';
+      if (ROUND_LABEL.test(label)) { return PASS_TURN.test(label); }
     }
-    return best;
+
+    var active = null;
+    var mine = null;
+    seats.forEach(function (s) {
+      if (s.hasTurn) { active = s.name; }
+      if (s.isYou) { mine = s.name; }
+    });
+    return (active && mine) ? active === mine : null;
   }
 
-  /** The seat labelled "you". */
-  function readSelfLabel() {
-    var owners = document.querySelectorAll('[data-player-id], [data-player-board-id], [data-zone-player-id]');
-    var best = null;
-    var bestLen = Infinity;
-    for (var i = 0; i < owners.length; i++) {
-      var el = owners[i];
-      var text = (el.textContent || '').trim();
-      if (text.length < 160 && text.length < bestLen && /you/i.test(text) && playerIdOf(el)) {
-        best = playerIdOf(el);
-        bestLen = text.length;
-      }
-    }
-    return best;
-  }
-
-  /**
-   * Raw evidence about how this page marks seats, turns and phases. Carried on
-   * the snapshot so the panel can report it without anyone opening DevTools.
-   */
-  function diagnostics() {
-    // The seat panels carry no player id of their own, so instead of guessing
-    // a selector, walk up from each TURN / YOU badge and record what is there.
-    var seats = [];
-    var badges = [];
-    document.querySelectorAll('span, p, div, small, b, strong').forEach(function (el) {
-      if (el.children.length || badges.length >= 8) { return; }
-      var t = (el.textContent || '').trim();
-      if (/^(turn|you|your turn)$/i.test(t)) { badges.push({ label: t, el: el }); }
-    });
-
-    badges.forEach(function (b2) {
-      var chain = [];
-      var node = b2.el;
-      var depth = 0;
-      while (node && depth < 7) {
-        var attrs = {};
-        [].forEach.call(node.attributes || [], function (at) {
-          if (at.name !== 'style') { attrs[at.name] = String(at.value).slice(0, 70); }
-        });
-        chain.push({ tag: node.tagName, attrs: attrs, text: (node.textContent || '').trim().slice(0, 45) });
-        node = node.parentElement;
-        depth += 1;
-      }
-      seats.push({ badge: b2.label, chain: chain });
-    });
-
-    // The "act as this seat" buttons name every player.
-    var seatButtons = [];
-    document.querySelectorAll('[title], button').forEach(function (el) {
-      var title = el.getAttribute('title') || '';
-      if (!/seat/i.test(title)) { return; }
-      var attrs = {};
-      [].forEach.call(el.attributes || [], function (at) {
-        if (at.name !== 'style') { attrs[at.name] = String(at.value).slice(0, 70); }
-      });
-      seatButtons.push({ name: (el.textContent || '').trim().slice(0, 30), attrs: attrs,
-                         parentCls: String(el.parentElement && el.parentElement.className).slice(0, 50) });
-    });
-
-    var aria = null;
-    document.querySelectorAll('[aria-label]').forEach(function (el) {
-      var a = el.getAttribute('aria-label') || '';
-      if (/rounds*d|pass turn/i.test(a)) { aria = a; }
-    });
-
-    var phases = [];
-    var words = /(untap|upkeep|main phase|combat|end step|cleanup|priority)/i;
-    document.querySelectorAll('p, span, div, button').forEach(function (el) {
-      if (el.children.length || phases.length >= 5) { return; }
-      var t = (el.textContent || '').trim();
-      if (t && t.length < 60 && words.test(t)) { phases.push(t); }
-    });
-
-    return { seats: seats.slice(0, 6), seatButtons: seatButtons.slice(0, 6),
-             turnAria: aria, phaseWords: phases };
-  }
+  /* ---------- snapshot ---------- */
 
   function snapshot() {
     var cards = readCards();
-    var self = findSelf(cards);
+    var seats = readSeats();
     var zones = {};
     cards.forEach(function (c) { zones[c.zone] = (zones[c.zone] || 0) + 1; });
 
+    var activeSeat = null;
+    var mySeat = null;
+    seats.forEach(function (s) {
+      if (s.hasTurn) { activeSeat = s.name; }
+      if (s.isYou) { mySeat = s.name; }
+    });
+
     return {
       url: location.href,
-      self: self,
-      selfLabel: readSelfLabel(),
-      activePlayer: readActivePlayer(),
+      self: findSelf(cards),
       turn: readTurn(),
+      myTurn: readMyTurn(seats),
+      activeSeat: activeSeat,
+      mySeat: mySeat,
       // Only cards we can actually identify are useful downstream.
       cards: cards.filter(function (c) { return c.scryfallId; }),
-      // Kept for diagnostics: if the page ever renames a zone this shows it.
       zoneCounts: zones,
       totalCardEls: cards.length,
-      diag: diagnostics()
+      diag: { seats: seats, phaseWords: phaseWords() }
     };
   }
+
+  /** edhplay has no phases; this stays so a future change would be noticed. */
+  function phaseWords() {
+    var words = /\b(untap|upkeep|main phase|combat|end step|cleanup|priority)\b/i;
+    var found = [];
+    document.querySelectorAll('p, span, div, button').forEach(function (el) {
+      if (el.children.length || found.length >= 5) { return; }
+      var t = (el.textContent || '').trim();
+      if (t && t.length < 60 && words.test(t)) { found.push(t); }
+    });
+    return found;
+  }
+
+  /* ---------- publishing ---------- */
 
   var lastSerialised = '';
 
@@ -234,7 +200,7 @@
     }
 
     var serialised = JSON.stringify(snap.cards) + '|' + snap.self + '|' +
-                     snap.activePlayer + '|' + snap.turn;
+                     snap.myTurn + '|' + snap.turn;
     if (serialised === lastSerialised) { return; }
     lastSerialised = serialised;
 
@@ -259,7 +225,7 @@
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['data-zone', 'data-card-id', 'src']
+    attributeFilter: ['data-zone', 'data-card-id', 'aria-label', 'class', 'src']
   });
 
   // The board is drawn well after load, so take a few early readings too.
