@@ -13,7 +13,9 @@
       nagOnAdvance: true,
       haptics: true,
       skipEmptySteps: false,
-      showOpponentTurns: true
+      showOpponentTurns: true,
+      turnQuestions: true,
+      endTurnSweep: true
     }
   };
 

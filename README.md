@@ -27,15 +27,36 @@ that fire on *every* turn: Seedborn Muse untapping, Rhystic Study taxing, an
 "at the beginning of each upkeep" clause. Flip to *Opponent's turn* and the app
 shows only what's live during someone else's turn.
 
-**Event watch list.** Landfall, ETB, dies, cast, lifegain and friends can't be
-pinned to a step, so they sit in an always-visible panel, grouped by what sets
-them off.
+**You only track a handful of cards.** Tapping every permanent into an app while
+you're actually playing is too much work, so the app splits the deck in two:
 
-**A visual card picker.** Putting a permanent into play means picking it off a
-grid of real card images pulled from Scryfall, split into Creatures, Instants,
-Sorceries, Artifacts, Enchantments, Planeswalkers, Battles and Lands. Each tile
-carries a badge with its reminder count, and cards already on the board are
-greyed out. Type chips and a search box narrow it down when the deck is large.
+- **Phase triggers** fire *to* you on a schedule — upkeep, end step, combat. The
+  app can't know they're out unless you say so, so these are the only cards you
+  ever tap in. On the sample list that's **13 cards out of 55**.
+- **Event triggers** fire *because* something happened — a land entered, a
+  creature died, someone cast a spell. You already know when that happened, so
+  the app just asks.
+
+**Turn questions.** Everything not tracked becomes a short list of prompts:
+*A land entered · A creature died · A spell was cast.* Tap one when it happens
+and it names the cards that care and counts the occurrence, so a board wipe
+registers as eight Grave Pact triggers rather than one. Twenty event cards
+collapse into eight questions, and the list doesn't grow with deck size — it's
+bounded by the number of event *types*, not cards.
+
+Cards you have told the app about are highlighted inside the questions, so a
+tracked Rhystic Study shows as "1 in play" under *A spell was cast*.
+
+**A sweep before you pass.** Ending a turn opens the question list one last time
+so a missed trigger gets caught before the turn is gone. Both the questions and
+the sweep can be switched off in settings.
+
+**A visual card picker.** Tracking a card means picking it off a grid of real
+card images pulled from Scryfall, split into Creatures, Instants, Sorceries,
+Artifacts, Enchantments, Planeswalkers, Battles and Lands. It defaults to
+*Needs tracking* so you only see the handful that matter, with *Any trigger* and
+*All cards* a tap away. Each tile carries a badge with its reminder count, and
+cards already on the board are greyed out.
 
 **Zone tracking.** Move a card between battlefield, graveyard, exile, hand and the
 command zone. Graveyard abilities (flashback, escape, disturb, unearth) surface
@@ -74,7 +95,8 @@ Your commander is detected from a `Commander` header or a `*CMDR*` flag.
 | --- | --- | --- |
 | Next step | **Next step →** | `→` or `Space` |
 | Previous step | **←** | `←` |
-| Put a card into play | **+ Card** | `A` |
+| Track a card | **+ Card** | `A` |
+| Log an event | tap a question | tap a question |
 | End the turn | **End turn ↻** | `T` |
 | Jump to any step | tap the rail | tap the rail |
 | Close a popup | tap outside | `Esc` |
@@ -119,8 +141,11 @@ with `~`, and the line is matched against rule tables in
 [`js/data.js`](js/data.js):
 
 - **`PHASE_RULES`** pin a trigger to a step, and carry a scope — `you`, `each` or
-  `opp` — which is what makes the opponent's-turn view work.
-- **`EVENT_RULES`** bucket triggers that fire off events rather than steps.
+  `opp` — which is what makes the opponent's-turn view work. Matching here is
+  also what marks a card as needing tracking.
+- **`EVENT_RULES`** bucket triggers that fire off events rather than steps. Each
+  bucket carries an `ask` string, which is the turn question it becomes; buckets
+  with `ask: null` are about the card itself and never become questions.
 - **`STATIC_RULES`** catch non-triggers you still forget: extra land drops, cost
   reduction, replacement effects.
 - **`CRITICAL_RULES`** flag the ones that cost you the game.

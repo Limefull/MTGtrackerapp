@@ -225,6 +225,35 @@
     return hits;
   }
 
+  /**
+   * Event triggers across the whole deck, grouped into the questions asked each
+   * turn. Deliberately ignores zones: these fire because the player did
+   * something, and the player knows their own board — so asking costs one tap
+   * and saves tapping every permanent into the app.
+   * @param {string[]} names deck card names
+   * @param {Object} analysisMap name -> analysis
+   */
+  function deckQuestions(names, analysisMap) {
+    var groups = {};
+    var seen = {};
+    names.forEach(function (name) {
+      var a = analysisMap[name];
+      if (!a) { return; }
+      a.triggers.forEach(function (t) {
+        if (t.type !== 'event') { return; }
+        var ev = D.EVENT_BY_ID[t.event];
+        if (!ev || !ev.ask) { return; }          // self-referential, not a question
+        var k = t.event + '|' + name + '|' + t.text;
+        if (seen[k]) { return; }
+        seen[k] = true;
+        (groups[t.event] = groups[t.event] || []).push({ name: name, trigger: t });
+      });
+    });
+    return D.EVENTS
+      .filter(function (e) { return groups[e.id]; })
+      .map(function (e) { return { event: e, hits: groups[e.id] }; });
+  }
+
   /** Event triggers that are live given the current board, grouped by event. */
   function watchList(board) {
     var groups = {};
@@ -242,11 +271,18 @@
       .map(function (e) { return { event: e, hits: groups[e.id] }; });
   }
 
+  /** Does this card fire on its own schedule? Those are the ones worth tracking. */
+  function needsTracking(analysis) {
+    return !!analysis && analysis.triggers.some(function (t) { return t.type === 'phase'; });
+  }
+
   global.MTGTriggers = {
     analyzeCard: analyzeCard,
     analyzeDeck: analyzeDeck,
     triggersNow: triggersNow,
     watchList: watchList,
+    deckQuestions: deckQuestions,
+    needsTracking: needsTracking,
     stripReminders: stripReminders
   };
 })(window);

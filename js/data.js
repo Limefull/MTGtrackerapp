@@ -25,27 +25,30 @@
 
   /* ---------- Event buckets (can fire at any time) ---------- */
 
+  /* `ask` is the past-tense prompt shown in the turn questions. Events with
+     ask:null are about the tracked card itself, so a question makes no sense —
+     they surface on the card instead. */
   var EVENTS = [
-    { id: 'etb_self',   name: 'This enters the battlefield' },
-    { id: 'etb_other',  name: 'Another permanent enters' },
-    { id: 'landfall',   name: 'Landfall - a land enters' },
-    { id: 'token',      name: 'Tokens are created' },
-    { id: 'dies_self',  name: 'This dies / leaves' },
-    { id: 'dies_other', name: 'Another creature dies' },
-    { id: 'graveyard',  name: 'Cards hit a graveyard' },
-    { id: 'cast',       name: 'A spell is cast' },
-    { id: 'draw_event', name: 'You draw a card' },
-    { id: 'discard',    name: 'You discard' },
-    { id: 'lifegain',   name: 'You gain life' },
-    { id: 'lifeloss',   name: 'Life is lost' },
-    { id: 'damage_evt', name: 'Damage is dealt' },
-    { id: 'sacrifice',  name: 'You sacrifice something' },
-    { id: 'counters',   name: 'Counters are placed' },
-    { id: 'tapped',     name: 'Permanents tap / untap' },
-    { id: 'targeted',   name: 'Something becomes targeted' },
-    { id: 'exiled',     name: 'Cards are exiled' },
-    { id: 'attacked',   name: 'A creature attacks you' },
-    { id: 'other_evt',  name: 'Other triggered ability' }
+    { id: 'etb_self',   name: 'This enters the battlefield', ask: null },
+    { id: 'dies_self',  name: 'This dies / leaves',          ask: null },
+    { id: 'landfall',   name: 'Landfall - a land enters',    ask: 'A land entered the battlefield' },
+    { id: 'etb_other',  name: 'Another permanent enters',    ask: 'Another permanent entered' },
+    { id: 'token',      name: 'Tokens are created',          ask: 'Tokens were created' },
+    { id: 'dies_other', name: 'Another creature dies',       ask: 'A creature died' },
+    { id: 'graveyard',  name: 'Cards hit a graveyard',       ask: 'Cards hit a graveyard' },
+    { id: 'cast',       name: 'A spell is cast',             ask: 'A spell was cast' },
+    { id: 'draw_event', name: 'You draw a card',             ask: 'Someone drew a card' },
+    { id: 'discard',    name: 'You discard',                 ask: 'A card was discarded' },
+    { id: 'lifegain',   name: 'You gain life',               ask: 'Life was gained' },
+    { id: 'lifeloss',   name: 'Life is lost',                ask: 'Life was lost' },
+    { id: 'damage_evt', name: 'Damage is dealt',             ask: 'Damage was dealt' },
+    { id: 'sacrifice',  name: 'You sacrifice something',     ask: 'Something was sacrificed' },
+    { id: 'counters',   name: 'Counters are placed',         ask: 'Counters were placed' },
+    { id: 'tapped',     name: 'Permanents tap / untap',      ask: 'Something tapped or untapped' },
+    { id: 'targeted',   name: 'Something becomes targeted',  ask: 'Something became a target' },
+    { id: 'exiled',     name: 'Cards are exiled',            ask: 'Cards were exiled' },
+    { id: 'attacked',   name: 'A creature attacks you',      ask: 'A creature attacked you' },
+    { id: 'other_evt',  name: 'Other triggered ability',     ask: 'Something else happened' }
   ];
 
   var EVENT_BY_ID = {};

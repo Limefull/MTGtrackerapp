@@ -37,7 +37,7 @@
   var state = Store.load();
   var analysis = {};        // card name -> analysis
   var cardsByName = {};     // lowercased name -> trimmed Scryfall card
-  var addFilter = 'triggers';
+  var addFilter = 'tracked';
   var typeFilter = 'all';
   var detailKey = null;
   var pendingAdvance = false;
@@ -116,6 +116,17 @@
     return a.triggers.length + a.statics.length;
   }
 
+  /** Fires on its own schedule, so the app has to be told it is in play. */
+  function needsTracking(name) {
+    return Trig.needsTracking(analysis[name]);
+  }
+
+  function phaseTriggerCount(name) {
+    var a = analysis[name];
+    if (!a) { return 0; }
+    return a.triggers.filter(function (t) { return t.type === 'phase'; }).length;
+  }
+
   /* ---------------- instances and zones ---------------- */
 
   function instKey(name, copy) { return name + '§' + copy; }
@@ -183,6 +194,52 @@
       if (k.indexOf(g.turn + '|') === 0) { keep[k] = 1; }
     });
     g.resolved = keep;
+    g.answers = {};
+  }
+
+  /* ---------------- turn questions ---------------- */
+
+  function questions() {
+    var deck = activeDeck();
+    if (!deck) { return []; }
+    return Trig.deckQuestions(deck.entries.map(function (e) { return e.name; }), analysis);
+  }
+
+  function answerCount(eventId) {
+    return (state.game.answers && state.game.answers[eventId]) || 0;
+  }
+
+  function answerQuestion(eventId) {
+    var g = state.game;
+    g.answers = g.answers || {};
+    g.answers[eventId] = answerCount(eventId) + 1;
+    persist();
+    buzz(14);
+
+    var group = null;
+    questions().forEach(function (q) { if (q.event.id === eventId) { group = q; } });
+    if (group) {
+      var live = group.hits.filter(function (h) { return isOnBoard(h.name); });
+      var names = (live.length ? live : group.hits).map(function (h) { return h.name; });
+      toast(names.slice(0, 4).join(', ') + (names.length > 4 ? ' +' + (names.length - 4) + ' more' : ''), 3200);
+    }
+    renderPlay();
+    if (!$('#modal-sweep').classList.contains('hidden')) { renderSweep(); }
+  }
+
+  function clearAnswer(eventId) {
+    if (!state.game.answers) { return; }
+    delete state.game.answers[eventId];
+    persist();
+    renderPlay();
+  }
+
+  function isOnBoard(name) {
+    var g = state.game;
+    if (!g) { return false; }
+    return Object.keys(g.zones).some(function (k) {
+      return k.split('§')[0] === name && g.zones[k] === 'battlefield';
+    });
   }
 
   /* ---------------- phase helpers ---------------- */
@@ -304,7 +361,8 @@
   function openGame(deck) {
     hydrate(deck);
     if (!state.game || state.game.deckId !== deck.id) {
-      state.game = { deckId: deck.id, turn: 1, phaseIndex: 1, myTurn: true, zones: {}, resolved: {} };
+      state.game = { deckId: deck.id, turn: 1, phaseIndex: 1, myTurn: true,
+                     zones: {}, resolved: {}, answers: {} };
       // Commanders start where you can see them.
       deck.entries.forEach(function (e) {
         if (e.isCommander) { state.game.zones[instKey(e.name, 0)] = 'command'; }
@@ -362,6 +420,10 @@
     }
 
     $('#btn-next-phase').classList.remove('warn');
+
+    // Walking off the end of Cleanup is the same as passing the turn.
+    if (g.phaseIndex >= D.PHASES.length - 1) { endTurn(); return; }
+
     var next = g.phaseIndex + 1;
     if (state.settings.skipEmptySteps) {
       while (next < D.PHASES.length && SKIPPABLE[D.PHASES[next].id]) {
@@ -373,7 +435,13 @@
     setPhase(next);
   }
 
-  function endTurn() {
+  function endTurn(skipSweep) {
+    // The sweep is the last chance to catch an event trigger that slipped past.
+    if (!skipSweep && state.settings.endTurnSweep && questions().length) {
+      openSweep();
+      return;
+    }
+    $('#modal-sweep').classList.add('hidden');
     var g = state.game;
     g.turn += 1;
     g.phaseIndex = 0;
@@ -454,25 +522,68 @@
   }
 
   function renderWatch() {
-    var groups = Trig.watchList(board());
-    var total = groups.reduce(function (s, g) { return s + g.hits.length; }, 0);
-    $('#watch-count').textContent = total;
-
     var host = $('#watch-list');
-    if (!groups.length) {
-      host.innerHTML = '<div class="empty small">Nothing on the board triggers off events yet.</div>';
+    var block = host.parentNode;
+
+    if (!state.settings.turnQuestions) {
+      block.classList.add('hidden');
       return;
     }
-    host.innerHTML = groups.map(function (g) {
-      return '<div class="watch-group">' +
-        '<div class="watch-title">' + esc(g.event.name) + '<span class="pill dim">' + g.hits.length + '</span></div>' +
-        g.hits.map(function (h) {
-          return '<div class="watch-item" data-card="' + esc(h.item.name) + '">' +
-            '<b>' + esc(h.item.name) + '</b> <span class="muted">' + esc(h.trigger.text) + '</span>' +
-          '</div>';
+    block.classList.remove('hidden');
+
+    var groups = questions();
+    $('#watch-count').textContent = groups.length;
+
+    if (!groups.length) {
+      host.innerHTML = '<div class="empty small">Nothing in this deck triggers off events.</div>';
+      return;
+    }
+    host.innerHTML = groups.map(function (q) { return questionRow(q, false); }).join('');
+  }
+
+  /** One tappable question. Tapping it counts an occurrence and names the cards. */
+  function questionRow(q, wide) {
+    var n = answerCount(q.event.id);
+    var live = q.hits.filter(function (h) { return isOnBoard(h.name); });
+    var names = q.hits.slice().sort(function (a, b) {
+      return (isOnBoard(b.name) ? 1 : 0) - (isOnBoard(a.name) ? 1 : 0) || a.name.localeCompare(b.name);
+    });
+
+    // On the play screen the chips stay on one line — the full list is in the
+    // sweep and in the toast you get when you tap.
+    var shown = wide ? names : names.slice(0, 3);
+    var hidden = names.length - shown.length;
+
+    return '<div class="question' + (n ? ' answered' : '') + (wide ? ' wide' : '') + '">' +
+      '<button class="q-main" data-ask="' + esc(q.event.id) + '">' +
+        '<span class="q-ask">' + esc(q.event.ask) + '</span>' +
+        '<span class="q-cards">' + shown.map(function (h) {
+          return '<span class="q-card' + (isOnBoard(h.name) ? ' live' : '') + '" title="' +
+            esc(h.trigger.text) + '">' + esc(h.name) + '</span>';
         }).join('') +
-      '</div>';
-    }).join('');
+        (hidden > 0 ? '<span class="q-more">+' + hidden + '</span>' : '') + '</span>' +
+        (live.length ? '<span class="q-live">' + live.length + ' in play</span>' : '') +
+      '</button>' +
+      (n
+        ? '<button class="q-count" data-clear="' + esc(q.event.id) + '" title="Tap to reset">&times;' + n + '</button>'
+        : '<span class="q-hint">tap</span>') +
+    '</div>';
+  }
+
+  function renderSweep() {
+    var groups = questions();
+    var unanswered = groups.filter(function (q) { return !answerCount(q.event.id); });
+    $('#sweep-hint').textContent = unanswered.length
+      ? 'These have not come up yet this turn. Tap any that did happen.'
+      : 'Everything has been accounted for this turn.';
+    $('#sweep-body').innerHTML = groups.length
+      ? groups.map(function (q) { return questionRow(q, true); }).join('')
+      : '<div class="empty small">This deck has no event triggers to check.</div>';
+  }
+
+  function openSweep() {
+    renderSweep();
+    $('#modal-sweep').classList.remove('hidden');
   }
 
   function renderBoard() {
@@ -480,12 +591,13 @@
     $('#board-count').textContent = items.length;
     var host = $('#board-list');
     if (!items.length) {
-      host.innerHTML = '<div class="empty small">Tap <b>+ Card</b> as you play permanents. ' +
-        'The app only reminds you about cards you actually control.</div>';
+      host.innerHTML = '<div class="empty small">Tap <b>+ Card</b> only for permanents that fire ' +
+        'on their own schedule — upkeep, end step, combat. Everything else is covered by the ' +
+        'questions above.</div>';
       return;
     }
     host.innerHTML = items.map(function (it) {
-      var n = triggerCount(it.name);
+      var n = phaseTriggerCount(it.name);
       return '<button class="board-chip zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
         esc(it.name) +
         (n ? '<span class="pill dim">' + n + '</span>' : '') +
@@ -508,6 +620,7 @@
     var q = $('#add-search').value.trim().toLowerCase();
 
     var rows = deck.entries.filter(function (e) {
+      if (addFilter === 'tracked' && !needsTracking(e.name)) { return false; }
       if (addFilter === 'triggers' && !triggerCount(e.name)) { return false; }
       if (q && e.name.toLowerCase().indexOf(q) === -1) {
         var card = cardsByName[e.name.toLowerCase()];
@@ -556,7 +669,8 @@
 
   function cardTile(entry) {
     var free = freeInstance(entry);
-    var n = triggerCount(entry.name);
+    // In the tracking view the phase-trigger count is the number that matters.
+    var n = addFilter === 'tracked' ? phaseTriggerCount(entry.name) : triggerCount(entry.name);
     var card = cardsByName[entry.name.toLowerCase()];
     var src = card && (card.thumb || card.image);
     var left = countAvailable(entry);
@@ -758,6 +872,8 @@
     $('#set-haptics').checked = !!state.settings.haptics;
     $('#set-skip').checked = !!state.settings.skipEmptySteps;
     $('#set-opp').checked = !!state.settings.showOpponentTurns;
+    $('#set-questions').checked = !!state.settings.turnQuestions;
+    $('#set-sweep').checked = !!state.settings.endTurnSweep;
     $('#cache-info').textContent = Scry.cacheSize() + ' cards cached.';
     $('#version-line').textContent = 'Version ' + VERSION;
   }
@@ -814,7 +930,8 @@
     $('#seg-opp').addEventListener('click', function () {
       state.game.myTurn = false; persist(); renderPlay();
     });
-    $('#btn-next-turn').addEventListener('click', endTurn);
+    // Wrapped: passing endTurn directly hands it the click event as `skipSweep`.
+    $('#btn-next-turn').addEventListener('click', function () { endTurn(); });
     $('#btn-next-phase').addEventListener('click', nextPhase);
     $('#btn-prev-phase').addEventListener('click', function () { setPhase(state.game.phaseIndex - 1); });
     $('#btn-add-card').addEventListener('click', openAdd);
@@ -843,10 +960,13 @@
       var chip = ev.target.closest('[data-inst]');
       if (chip) { openInstance(chip.getAttribute('data-inst')); }
     });
-    $('#watch-list').addEventListener('click', function (ev) {
-      var row = ev.target.closest('[data-card]');
-      if (row) { openCardByName(row.getAttribute('data-card')); }
+    bindQuestions('#watch-list');
+    bindQuestions('#sweep-body');
+
+    $('#btn-close-sweep').addEventListener('click', function () {
+      $('#modal-sweep').classList.add('hidden');
     });
+    $('#btn-sweep-done').addEventListener('click', function () { endTurn(true); });
 
     collapsible('#toggle-watch', '#watch-list');
     collapsible('#toggle-board', '#board-list');
@@ -894,6 +1014,8 @@
     bindToggle('#set-haptics', 'haptics');
     bindToggle('#set-skip', 'skipEmptySteps');
     bindToggle('#set-opp', 'showOpponentTurns');
+    bindToggle('#set-questions', 'turnQuestions');
+    bindToggle('#set-sweep', 'endTurnSweep');
 
     $('#btn-clear-cache').addEventListener('click', function () {
       if (!confirm('Clear cached card text? You will need a connection to reload it.')) { return; }
@@ -941,6 +1063,17 @@
     });
   }
 
+  function bindQuestions(sel) {
+    $(sel).addEventListener('click', function (ev) {
+      var clear = ev.target.closest('[data-clear]');
+      if (clear) { clearAnswer(clear.getAttribute('data-clear')); return; }
+      var card = ev.target.closest('.q-card');
+      if (card) { openCardByName(card.textContent); return; }
+      var ask = ev.target.closest('[data-ask]');
+      if (ask) { answerQuestion(ask.getAttribute('data-ask')); }
+    });
+  }
+
   function collapsible(btnSel, bodySel) {
     $(btnSel).addEventListener('click', function () {
       var body = $(bodySel);
@@ -954,6 +1087,9 @@
     $(sel).addEventListener('change', function (ev) {
       state.settings[key] = ev.target.checked;
       persist();
+      // Several settings change what the play screen shows, so redraw it now
+      // rather than waiting for the next interaction.
+      if (state.game && activeDeck()) { renderPlay(); }
     });
   }
 

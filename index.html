@@ -78,15 +78,15 @@
 
         <section class="block">
           <button class="block-head" id="toggle-watch" aria-expanded="true">
-            <span>Watch for <span class="pill dim" id="watch-count">0</span></span>
+            <span>Did this happen? <span class="pill dim" id="watch-count">0</span></span>
             <span class="chev">&#9662;</span>
           </button>
-          <div id="watch-list" class="watch-list"></div>
+          <div id="watch-list" class="question-list"></div>
         </section>
 
         <section class="block">
           <button class="block-head" id="toggle-board" aria-expanded="true">
-            <span>Battlefield <span class="pill dim" id="board-count">0</span></span>
+            <span>Tracked cards <span class="pill dim" id="board-count">0</span></span>
             <span class="chev">&#9662;</span>
           </button>
           <div id="board-list" class="board-list"></div>
@@ -130,6 +130,8 @@
         <label class="switch"><input type="checkbox" id="set-haptics"><span>Vibrate when a step has triggers</span></label>
         <label class="switch"><input type="checkbox" id="set-skip"><span>Skip steps that have no triggers</span></label>
         <label class="switch"><input type="checkbox" id="set-opp"><span>Track opponents' turns too</span></label>
+        <label class="switch"><input type="checkbox" id="set-questions"><span>Show the turn questions on the play screen</span></label>
+        <label class="switch"><input type="checkbox" id="set-sweep"><span>Run the question sweep when you end a turn</span></label>
       </div>
       <div class="card">
         <h2>Data</h2>
@@ -157,12 +159,29 @@
         <button class="btn ghost icon" id="btn-close-add" aria-label="Close">&#10005;</button>
       </header>
       <input class="input" id="add-search" type="search" placeholder="Search your deck" autocomplete="off">
+      <p class="modal-hint">Only cards that fire on their own schedule need tracking — everything else is covered by the turn questions.</p>
       <div class="chip-row" id="add-filters">
-        <button class="chip active" data-filter="triggers">Has triggers</button>
+        <button class="chip active" data-filter="tracked">Needs tracking</button>
+        <button class="chip" data-filter="triggers">Any trigger</button>
         <button class="chip" data-filter="all">All cards</button>
       </div>
       <div class="chip-row scroll-x" id="add-types"></div>
       <div class="modal-scroll" id="add-results"></div>
+    </div>
+  </div>
+
+  <!-- ============ END-OF-TURN QUESTION SWEEP ============ -->
+  <div class="modal hidden" id="modal-sweep">
+    <div class="modal-panel">
+      <header class="modal-head">
+        <h2 id="sweep-title">Before you pass</h2>
+        <button class="btn ghost icon" id="btn-close-sweep" aria-label="Close">&#10005;</button>
+      </header>
+      <p class="modal-hint" id="sweep-hint">Anything you missed this turn?</p>
+      <div class="modal-scroll" id="sweep-body"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary grow" id="btn-sweep-done">All handled — pass the turn</button>
+      </div>
     </div>
   </div>
 

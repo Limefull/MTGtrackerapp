@@ -186,7 +186,45 @@ getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
   check('landfall appears once Lotus Cobra hits play',
         watch.some(function (g) { return g.event.id === 'landfall'; }));
 
-  /* ---- 4. every phase id referenced by a rule exists ---- */
+  /* ---- 4. the tracking / question split ---- */
+
+  console.log('\nTracking vs questions');
+
+  var analysisMap = {};
+  Object.keys(cards).forEach(function (k) {
+    analysisMap[cards[k].name] = Trig.analyzeCard(cards[k]);
+  });
+
+  // Phase triggers fire on a schedule, so the app must be told they are in play.
+  check('Phyrexian Arena needs tracking', Trig.needsTracking(analysisMap['Phyrexian Arena']));
+  check('Mystic Remora needs tracking', Trig.needsTracking(analysisMap['Mystic Remora']));
+  check('Seedborn Muse needs tracking', Trig.needsTracking(analysisMap['Seedborn Muse']));
+  // Event triggers fire because the player did something, so a question covers them.
+  check('Lotus Cobra does NOT need tracking', !Trig.needsTracking(analysisMap['Lotus Cobra']));
+  check('Grave Pact does NOT need tracking', !Trig.needsTracking(analysisMap['Grave Pact']));
+  check('Rhystic Study does NOT need tracking', !Trig.needsTracking(analysisMap['Rhystic Study']));
+
+  var qs = Trig.deckQuestions(Object.keys(analysisMap), analysisMap);
+  var qIds = qs.map(function (q) { return q.event.id; });
+
+  check('questions collapse many cards into few prompts', qs.length < Object.keys(analysisMap).length,
+        qs.length + ' questions for ' + Object.keys(analysisMap).length + ' cards');
+  check('landfall is asked', qIds.indexOf('landfall') !== -1, qIds.join(','));
+  check('every question has a prompt', qs.every(function (q) { return !!q.event.ask; }));
+  check('self-referential events are never asked',
+        qIds.indexOf('etb_self') === -1 && qIds.indexOf('dies_self') === -1, qIds.join(','));
+
+  var landfall = qs.filter(function (q) { return q.event.id === 'landfall'; })[0];
+  check('one landfall question covers every landfall card',
+        landfall && landfall.hits.length >= 1,
+        landfall ? landfall.hits.map(function (h) { return h.name; }).join(', ') : 'missing');
+
+  // A question must not depend on zones — that is the whole point of asking.
+  var soloMap = { 'Lotus Cobra': analysisMap['Lotus Cobra'] };
+  check('questions work with nothing tracked',
+        Trig.deckQuestions(['Lotus Cobra'], soloMap).length === 1);
+
+  /* ---- 5. every phase id referenced by a rule exists ---- */
 
   console.log('\nData integrity');
   var badPhase = Data.PHASE_RULES.filter(function (r) { return !Data.PHASE_BY_ID[r.phase]; });
