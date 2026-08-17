@@ -1,0 +1,129 @@
+{
+  "activeSeat": "Player 1",
+  "mySeat": "You",
+  "myTurn": false,
+  "self": null,
+  "turn": 4,
+  "totalCardEls": 17,
+  "url": "https://edhplay.com/games/fa5e757c-a92e-4a62-b4d0-c32ec9997b48/play",
+  "zoneCounts": {
+    "battlefield": 8,
+    "commandZone": 2,
+    "graveyard": 1,
+    "hand": 5,
+    "library": 1
+  },
+  "diag": {
+    "phaseWords": [],
+    "seats": [
+      {
+        "hasTurn": false,
+        "isYou": true,
+        "name": "You"
+      },
+      {
+        "hasTurn": true,
+        "isYou": false,
+        "name": "Player 1"
+      }
+    ]
+  },
+  "cards": [
+    {
+      "cardId": "cd01528b",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "4e8dc90d-e9cd-401e-9ba0-960b3ee8336b",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "59275376",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "dce15387-4114-4b3e-91aa-5b42b45c44ac",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "9ad5754a",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "f3cc07cd-cc79-4745-b0b7-eade60175cc3",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "0af07372",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "dce15387-4114-4b3e-91aa-5b42b45c44ac",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "28ace16d",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "cd4dbf80-187b-40e3-9e0b-526f78d9a34e",
+      "zone": "graveyard"
+    },
+    {
+      "cardId": "bf8a6da3",
+      "player": "9824bcb7-46e6-4a77-9986-34524ab52acd",
+      "scryfallId": "4383ae7c-58ea-4354-93e4-677ad185c3bb",
+      "zone": "commandZone"
+    },
+    {
+      "cardId": "d0e7b9a1",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "748e6a61-9c1f-4225-9f04-e54002f63ac3",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "c9ab7546",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "5728dffd-0312-4844-8868-12f040b8326f",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "344f77f5",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "5e49c561-570c-43dd-a369-48bc7ad7edac",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "ccce1fdc",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "8c93a0f6-5e50-4dda-9ff6-da741fb839ff",
+      "zone": "battlefield"
+    },
+    {
+      "cardId": "e37a0702",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "6b39e1c7-b175-462e-83ab-dd67abec6bfb",
+      "zone": "hand"
+    },
+    {
+      "cardId": "ed4b1dbd",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "959ce13f-519f-4472-bbd1-f26a972723d7",
+      "zone": "hand"
+    },
+    {
+      "cardId": "51bb2b64",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "80dd2950-502c-4859-85fe-9fbef09aef43",
+      "zone": "hand"
+    },
+    {
+      "cardId": "466c105b",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "ced4c824-2dfc-42ae-84e6-09f8e3f51b5b",
+      "zone": "hand"
+    },
+    {
+      "cardId": "26fa280f",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "80b6636d-a342-4d49-9d1a-ab15b3d837c5",
+      "zone": "hand"
+    },
+    {
+      "cardId": "1040ca83",
+      "player": "07088c0e-3e2d-4dd9-a41e-4dc11ab237cc",
+      "scryfallId": "31f21aae-e25b-4d14-b558-a848a9372f92",
+      "zone": "commandZone"
+    }
+  ]
+}

@@ -1645,8 +1645,21 @@
     var picked = state.settings.edhPlayer;
     var players = snapshotPlayers(snap);
     if (picked && players.indexOf(picked) !== -1) { return picked; }
-    if (snap.selfLabel) { return snap.selfLabel; }
     if (snap.self) { return snap.self; }
+
+    // Work it out from the reading itself rather than trusting the page to have
+    // said so: only your own hand is rendered face up, so whoever owns
+    // identifiable hand cards is you.
+    var tally = {};
+    (snap.cards || []).forEach(function (c) {
+      if (c.zone === 'hand' && c.player) { tally[c.player] = (tally[c.player] || 0) + 1; }
+    });
+    var best = null;
+    Object.keys(tally).forEach(function (p) {
+      if (!best || tally[p] > tally[best]) { best = p; }
+    });
+    if (best) { return best; }
+
     return players.length === 1 ? players[0] : null;
   }
 
