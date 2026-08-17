@@ -210,6 +210,12 @@ the panel builds itself from what is actually there — battlefield, graveyard,
 exile, hand and command zone. edhplay tags every card with its Scryfall id, so
 matching is exact rather than name-guessing.
 
+It follows the game's own turn too: pass on edhplay and the panel flips to
+*Opponent's turn* by itself, and the turn counter tracks the table's.
+
+Only cards actually on the board are tracked — battlefield, graveyard, exile and
+the command zone. What is in your hand is not the board, so it is left alone.
+
 The only thing it ever asks is **which player you are**, and only when the page
 gives it no way to tell. Pick once and it remembers; **Not me** changes it. The
 **+ Card** button hides itself entirely while a live board is being mirrored.

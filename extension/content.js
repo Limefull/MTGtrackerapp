@@ -66,6 +66,67 @@
     return boards.length === 1 ? boards[0].getAttribute('data-player-board-id') : null;
   }
 
+  function playerIdOf(el) {
+    return el.getAttribute('data-player-id') ||
+           el.getAttribute('data-player-board-id') ||
+           el.getAttribute('data-zone-player-id') || null;
+  }
+
+  /** The turn counter, read off the "Turn N" readout. */
+  function readTurn() {
+    var nodes = document.querySelectorAll('p, span, div');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.children.length || !/^turn$/i.test((el.textContent || '').trim())) { continue; }
+      var box = el.parentElement;
+      if (!box) { continue; }
+      var m = /(d{1,3})/.exec((box.textContent || '').replace(/turn/i, ''));
+      if (m) { return parseInt(m[1], 10); }
+    }
+    return null;
+  }
+
+  /**
+   * Whoever the page is showing as having the turn. Class names are build
+   * hashes, so this leans on the badge text and on explicit state attributes.
+   */
+  function readActivePlayer() {
+    var flagged = document.querySelector(
+      '[data-player-id][data-state="active"], [data-player-board-id][data-state="active"]');
+    if (flagged) { return playerIdOf(flagged); }
+
+    var owners = document.querySelectorAll('[data-player-id], [data-player-board-id], [data-zone-player-id]');
+    var best = null;
+    var bestLen = Infinity;
+    for (var i = 0; i < owners.length; i++) {
+      var el = owners[i];
+      var text = (el.textContent || '').trim();
+      // Smallest container that mentions the turn badge wins, so the whole
+      // board does not match just because the counter sits inside it.
+      if (text.length < 160 && text.length < bestLen && /turn/i.test(text) && playerIdOf(el)) {
+        best = playerIdOf(el);
+        bestLen = text.length;
+      }
+    }
+    return best;
+  }
+
+  /** The seat labelled "you". */
+  function readSelfLabel() {
+    var owners = document.querySelectorAll('[data-player-id], [data-player-board-id], [data-zone-player-id]');
+    var best = null;
+    var bestLen = Infinity;
+    for (var i = 0; i < owners.length; i++) {
+      var el = owners[i];
+      var text = (el.textContent || '').trim();
+      if (text.length < 160 && text.length < bestLen && /you/i.test(text) && playerIdOf(el)) {
+        best = playerIdOf(el);
+        bestLen = text.length;
+      }
+    }
+    return best;
+  }
+
   function snapshot() {
     var cards = readCards();
     var self = findSelf(cards);
@@ -75,6 +136,9 @@
     return {
       url: location.href,
       self: self,
+      selfLabel: readSelfLabel(),
+      activePlayer: readActivePlayer(),
+      turn: readTurn(),
       // Only cards we can actually identify are useful downstream.
       cards: cards.filter(function (c) { return c.scryfallId; }),
       // Kept for diagnostics: if the page ever renames a zone this shows it.
@@ -93,7 +157,8 @@
       return;   // a mid-render DOM is not worth reporting
     }
 
-    var serialised = JSON.stringify(snap.cards) + '|' + snap.self;
+    var serialised = JSON.stringify(snap.cards) + '|' + snap.self + '|' +
+                     snap.activePlayer + '|' + snap.turn;
     if (serialised === lastSerialised) { return; }
     lastSerialised = serialised;
 

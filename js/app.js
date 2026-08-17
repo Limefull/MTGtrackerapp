@@ -1506,11 +1506,12 @@
   /* ---------------- live board from edhplay ---------------- */
 
   // Zones the page reports, mapped onto the app's own names.
+  // Deliberately no "hand": cards you are holding are not on the board and
+  // should not be tracked as though they were.
   var EDH_ZONES = {
     battlefield: 'battlefield',
     graveyard: 'graveyard',
     exile: 'exile',
-    hand: 'hand',
     command: 'command',
     commander: 'command'
   };
@@ -1541,6 +1542,7 @@
     var picked = state.settings.edhPlayer;
     var players = snapshotPlayers(snap);
     if (picked && players.indexOf(picked) !== -1) { return picked; }
+    if (snap.selfLabel) { return snap.selfLabel; }
     if (snap.self) { return snap.self; }
     return players.length === 1 ? players[0] : null;
   }
@@ -1559,7 +1561,8 @@
       return c.player === me && EDH_ZONES[c.zone];
     });
 
-    var fingerprint = me + '#' + mine.map(function (c) { return c.cardId + ':' + c.zone; }).sort().join('|');
+    var fingerprint = me + '#' + snap.turn + '#' + snap.activePlayer + '#' +
+      mine.map(function (c) { return c.cardId + ':' + c.zone; }).sort().join('|');
     if (fingerprint === lastSnapshotKey) { return; }
     lastSnapshotKey = fingerprint;
 
@@ -1597,10 +1600,35 @@
       });
       state.game.zones = zones;
 
+      followGameTurn(snap, me);
+
       persist();
       if ($('#screen-decks').classList.contains('hidden') === false) { showScreen('screen-play'); }
       renderPlay();
     });
+  }
+
+  /**
+   * Mirror the game's own turn state: whose turn it is, and which turn number.
+   * Passing the turn on edhplay flips the panel over on its own.
+   */
+  function followGameTurn(snap, me) {
+    var g = state.game;
+
+    if (snap.activePlayer) {
+      var mine = snap.activePlayer === me;
+      if (g.myTurn !== mine) {
+        g.myTurn = mine;
+        // A new player's turn starts at the top of the turn.
+        g.phaseIndex = 0;
+      }
+    }
+
+    if (typeof snap.turn === 'number' && snap.turn > 0 && snap.turn !== g.turn) {
+      g.turn = snap.turn;
+      g.phaseIndex = 0;
+      pruneResolved();
+    }
   }
 
   /** Banner shown while the panel is mirroring a live board. */
@@ -1628,9 +1656,12 @@
     }
 
     var tracked = activeBoard().length;
+    var whose = liveSnapshot.activePlayer
+      ? (liveSnapshot.activePlayer === me ? ' · your turn' : " · opponent's turn")
+      : '';
     bar.innerHTML = '<span class="live-dot"></span>' +
-      '<span class="live-text">Reading your board from edhplay · ' + tracked + ' card' +
-      (tracked === 1 ? '' : 's') + '</span>' +
+      '<span class="live-text">edhplay · ' + tracked + ' card' +
+      (tracked === 1 ? '' : 's') + whose + '</span>' +
       (players.length > 1
         ? '<button class="btn ghost small" id="btn-change-player">Not me</button>'
         : '');
