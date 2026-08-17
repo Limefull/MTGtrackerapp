@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  GRADLE_VERSION: '8.7'
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -20,10 +23,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
+      # Installed directly rather than via an action: one less third-party
+      # download to fail, and the version is pinned to what AGP 8.5 expects.
+      - name: Install Gradle ${{ env.GRADLE_VERSION }}
+        run: |
+          set -euo pipefail
+          url="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          curl -sSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/gradle.zip" "$url"
+          unzip -q -d "$HOME/gradle" "$RUNNER_TEMP/gradle.zip"
+          echo "$HOME/gradle/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+
+      # The runner image normally has these already; installing is a no-op then.
+      - name: Ensure Android SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null || true
+          fi
 
       - name: Bundle the web app into the APK assets
         run: node tools/build-assets.js
@@ -34,6 +57,7 @@ jobs:
 
       - name: Name the APK after the run
         run: |
+          set -euo pipefail
           mkdir -p out
           cp android/app/build/outputs/apk/debug/app-debug.apk \
              "out/trigger-tracker-${GITHUB_RUN_NUMBER}.apk"
