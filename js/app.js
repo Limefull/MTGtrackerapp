@@ -1607,10 +1607,14 @@
   // Zones the page reports, mapped onto the app's own names.
   // Deliberately no "hand": cards you are holding are not on the board and
   // should not be tracked as though they were.
+  // Names taken from a live game rather than guessed: the command zone comes
+  // through as "commandZone".
   var EDH_ZONES = {
     battlefield: 'battlefield',
     graveyard: 'graveyard',
     exile: 'exile',
+    commandZone: 'command',
+    command_zone: 'command',
     command: 'command',
     commander: 'command'
   };

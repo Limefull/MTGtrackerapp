@@ -72,8 +72,21 @@
            el.getAttribute('data-zone-player-id') || null;
   }
 
-  /** The turn counter, read off the "Turn N" readout. */
+  /**
+   * The turn counter. The pass-turn button spells it out — "Round 3 - Click to
+   * pass turn" — which is far steadier than scraping the visible text.
+   */
   function readTurn() {
+    var labelled = document.querySelectorAll('[aria-label]');
+    for (var a = 0; a < labelled.length; a++) {
+      var label = labelled[a].getAttribute('aria-label') || '';
+      var round = /rounds*(d{1,3})/i.exec(label);
+      if (round) { return parseInt(round[1], 10); }
+    }
+    return readTurnFromText();
+  }
+
+  function readTurnFromText() {
     var nodes = document.querySelectorAll('p, span, div');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
@@ -132,18 +145,44 @@
    * the snapshot so the panel can report it without anyone opening DevTools.
    */
   function diagnostics() {
+    // The seat panels carry no player id of their own, so instead of guessing
+    // a selector, walk up from each TURN / YOU badge and record what is there.
     var seats = [];
-    document.querySelectorAll('[data-player-board-id], [data-player-id], [data-zone-player-id]')
-      .forEach(function (el) {
-        var text = (el.textContent || '').trim();
-        if (text.length > 200 || !/(turn|you)/i.test(text)) { return; }
-        seats.push({
-          player: playerIdOf(el),
-          text: text.slice(0, 60),
-          state: el.getAttribute('data-state'),
-          cls: String(el.className).slice(0, 50)
+    var badges = [];
+    document.querySelectorAll('span, p, div, small, b, strong').forEach(function (el) {
+      if (el.children.length || badges.length >= 8) { return; }
+      var t = (el.textContent || '').trim();
+      if (/^(turn|you|your turn)$/i.test(t)) { badges.push({ label: t, el: el }); }
+    });
+
+    badges.forEach(function (b2) {
+      var chain = [];
+      var node = b2.el;
+      var depth = 0;
+      while (node && depth < 7) {
+        var attrs = {};
+        [].forEach.call(node.attributes || [], function (at) {
+          if (at.name !== 'style') { attrs[at.name] = String(at.value).slice(0, 70); }
         });
+        chain.push({ tag: node.tagName, attrs: attrs, text: (node.textContent || '').trim().slice(0, 45) });
+        node = node.parentElement;
+        depth += 1;
+      }
+      seats.push({ badge: b2.label, chain: chain });
+    });
+
+    // The "act as this seat" buttons name every player.
+    var seatButtons = [];
+    document.querySelectorAll('[title], button').forEach(function (el) {
+      var title = el.getAttribute('title') || '';
+      if (!/seat/i.test(title)) { return; }
+      var attrs = {};
+      [].forEach.call(el.attributes || [], function (at) {
+        if (at.name !== 'style') { attrs[at.name] = String(at.value).slice(0, 70); }
       });
+      seatButtons.push({ name: (el.textContent || '').trim().slice(0, 30), attrs: attrs,
+                         parentCls: String(el.parentElement && el.parentElement.className).slice(0, 50) });
+    });
 
     var aria = null;
     document.querySelectorAll('[aria-label]').forEach(function (el) {
@@ -159,7 +198,8 @@
       if (t && t.length < 60 && words.test(t)) { phases.push(t); }
     });
 
-    return { seats: seats.slice(0, 8), turnAria: aria, phaseWords: phases };
+    return { seats: seats.slice(0, 6), seatButtons: seatButtons.slice(0, 6),
+             turnAria: aria, phaseWords: phases };
   }
 
   function snapshot() {
