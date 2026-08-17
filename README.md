@@ -213,6 +213,12 @@ matching is exact rather than name-guessing.
 It follows the game's own turn too: pass on edhplay and the panel flips to
 *Opponent's turn* by itself, and the turn counter tracks the table's.
 
+The split of responsibility is deliberate: **edhplay owns the turn and the
+board, the panel owns the step.** So in live mode the turn switch, the *End
+turn* button and **+ Card** are hidden rather than left to be pressed and
+silently undone, and stepping past the last step wraps round instead of
+inventing a new turn. In a paper game they all come back.
+
 Only cards actually on the board are tracked — battlefield, graveyard, exile and
 the command zone. What is in your hand is not the board, so it is left alone.
 

@@ -12,8 +12,7 @@
     settings: {
       nagOnAdvance: true,
       haptics: true,
-      skipEmptySteps: false,
-      showOpponentTurns: true,
+      skipEmptySteps: true,
       turnQuestions: true,
       endTurnSweep: true,
       autoTrack: true

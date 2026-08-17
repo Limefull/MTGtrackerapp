@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MTG Trigger Tracker",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Phase-by-phase Magic trigger reminders in a side panel, beside your game on edhplay.com or at the table.",
   "permissions": [
     "sidePanel",

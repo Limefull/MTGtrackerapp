@@ -423,6 +423,12 @@
 
   /* ---------------- rendering: decks ---------------- */
 
+  /** True when the panel is telling the player their board is on its way. */
+  function waitingShown() {
+    var note = $('#waiting-note');
+    return !!note && !note.classList.contains('hidden');
+  }
+
   function renderDecks() {
     // In the extension the board arrives on its own, so do not lead with a
     // decklist form the player is not supposed to need.
@@ -433,11 +439,16 @@
     }
 
     var host = $('#deck-list');
-    if (!state.decks.length) {
-      host.innerHTML = '<div class="empty">No decks yet. Paste a list below to get started.</div>';
+    // The live board is rebuilt from edhplay every few seconds; listing it
+    // beside real decks invites deleting or "playing" something transient.
+    var listed = state.decks.filter(function (d) { return d.id !== LIVE_DECK_ID; });
+    if (!listed.length) {
+      host.innerHTML = waitingShown()
+        ? ''
+        : '<div class="empty">No decks yet. Paste a list below to get started.</div>';
       return;
     }
-    host.innerHTML = state.decks.map(function (d) {
+    host.innerHTML = listed.map(function (d) {
       var count = d.entries.reduce(function (s, e) { return s + e.qty; }, 0);
       var cmdr = d.entries.filter(function (e) { return e.isCommander; })
         .map(function (e) { return e.name; }).join(' & ');
@@ -495,16 +506,19 @@
 
   function setPhase(index, silent) {
     var g = state.game;
+    // Stepping off either end of the turn changes the turn — except in live
+    // mode, where edhplay owns the turn number and the steps simply wrap.
     if (index < 0) {
-      g.turn = Math.max(1, g.turn - 1);
       index = D.PHASES.length - 1;
-      pruneResolved();
+      if (!isLive()) { g.turn = Math.max(1, g.turn - 1); pruneResolved(); }
     }
     if (index >= D.PHASES.length) {
-      g.turn += 1;
       index = 0;
-      pruneResolved();
-      if (!silent) { toast('Turn ' + g.turn); }
+      if (!isLive()) {
+        g.turn += 1;
+        pruneResolved();
+        if (!silent) { toast('Turn ' + g.turn); }
+      }
     }
     g.phaseIndex = index;
     pendingAdvance = false;
@@ -532,8 +546,9 @@
 
     $('#btn-next-phase').classList.remove('warn');
 
-    // Walking off the end of Cleanup is the same as passing the turn.
-    if (g.phaseIndex >= D.PHASES.length - 1) { endTurn(); return; }
+    // Walking off the end of Cleanup passes the turn. setPhase applies the
+    // live-mode exception.
+    if (g.phaseIndex >= D.PHASES.length - 1 && !isLive()) { endTurn(); return; }
 
     var next = g.phaseIndex + 1;
     if (state.settings.skipEmptySteps) {
@@ -547,6 +562,8 @@
   }
 
   function endTurn(skipSweep) {
+    // The table decides when the turn ends; the panel just follows.
+    if (isLive()) { toast('edhplay controls the turn — pass it in the game.'); return; }
     // The sweep is the last chance to catch an event trigger that slipped past.
     if (!skipSweep && state.settings.endTurnSweep && questions().length) {
       openSweep();
@@ -575,7 +592,10 @@
     $('#btn-next-phase').classList.remove('warn');
 
     renderLiveBar();
+    // In live mode edhplay owns the turn and the board, so every control that
+    // would set them by hand is hidden rather than left to silently revert.
     $('#btn-add-card').classList.toggle('hidden', isLive());
+    $('.turn-toggle').classList.toggle('hidden', isLive());
     renderRail();
     renderNow();
     renderWatch();
@@ -782,6 +802,11 @@
   }
 
   function renderBoard() {
+    var head = $('#toggle-board');
+    if (head) {
+      head.querySelector('span').firstChild.nodeValue =
+        isLive() ? 'On your board ' : 'Tracked cards ';
+    }
     var active = activeBoard();
     var gone = goneBoard();
     $('#board-count').textContent = active.length;
@@ -841,6 +866,7 @@
   /* ---------------- add-card modal ---------------- */
 
   function openAdd() {
+    if (isLive()) { return; }   // the board is mirrored, nothing to add
     $('#modal-add').classList.remove('hidden');
     $('#add-search').value = '';
     renderAdd();
@@ -1173,7 +1199,6 @@
     $('#set-nag').checked = !!state.settings.nagOnAdvance;
     $('#set-haptics').checked = !!state.settings.haptics;
     $('#set-skip').checked = !!state.settings.skipEmptySteps;
-    $('#set-opp').checked = !!state.settings.showOpponentTurns;
     $('#set-questions').checked = !!state.settings.turnQuestions;
     $('#set-sweep').checked = !!state.settings.endTurnSweep;
     $('#set-autotrack').checked = !!state.settings.autoTrack;
@@ -1402,7 +1427,6 @@
     bindToggle('#set-nag', 'nagOnAdvance');
     bindToggle('#set-haptics', 'haptics');
     bindToggle('#set-skip', 'skipEmptySteps');
-    bindToggle('#set-opp', 'showOpponentTurns');
     bindToggle('#set-questions', 'turnQuestions');
     bindToggle('#set-sweep', 'endTurnSweep');
     bindToggle('#set-autotrack', 'autoTrack');
@@ -1448,8 +1472,8 @@
       if (ev.key === 'ArrowRight' || ev.key === ' ') { ev.preventDefault(); nextPhase(); }
       else if (ev.key === 'ArrowLeft') { ev.preventDefault(); setPhase(state.game.phaseIndex - 1); }
       else if (ev.key === 'Escape') { $$('.modal').forEach(function (m) { m.classList.add('hidden'); }); }
-      else if (ev.key.toLowerCase() === 'a') { ev.preventDefault(); openAdd(); }
-      else if (ev.key.toLowerCase() === 't') { endTurn(); }
+      else if (ev.key.toLowerCase() === 'a' && !isLive()) { ev.preventDefault(); openAdd(); }
+      else if (ev.key.toLowerCase() === 't' && !isLive()) { endTurn(); }
     });
   }
 
