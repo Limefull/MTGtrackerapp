@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Phase-by-phase Magic trigger reminders in a side panel, beside your game on edhplay.com or at the table.",
   "permissions": [
-    "sidePanel"
+    "sidePanel",
+    "storage"
   ],
   "host_permissions": [
     "https://api.scryfall.com/*",
@@ -36,5 +37,16 @@
       },
       "description": "Open the Trigger Tracker panel"
     }
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://edhplay.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

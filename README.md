@@ -204,9 +204,16 @@ To build it locally instead:
 node tools/build-extension.js   # then Load unpacked -> extension/
 ```
 
-The extension asks for no access to any game site — its only host permissions
-are `api.scryfall.com` and `cards.scryfall.io`, for card text and art. It
-cannot read the page you are playing on.
+**It reads your board automatically.** On edhplay.com a content script watches
+the page and mirrors your battlefield, graveyard, exile, hand and command zone
+into the tracker, so there is nothing to tap in. edhplay tags every card with its
+Scryfall id, so matching is exact rather than name-guessing, and only cards
+belonging to you are read. Turn it off with *Read my board automatically* in
+settings and the manual **+ Card** flow still works.
+
+That feature is the one reason the extension asks for access to edhplay.com. It
+is read-only — nothing is clicked or changed, and nothing leaves your browser
+except the Scryfall card lookups the app already makes.
 
 ### As an Android APK
 

@@ -15,7 +15,8 @@
       skipEmptySteps: false,
       showOpponentTurns: true,
       turnQuestions: true,
-      endTurnSweep: true
+      endTurnSweep: true,
+      autoTrack: true
     }
   };
 

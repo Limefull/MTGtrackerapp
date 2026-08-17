@@ -148,6 +148,82 @@
     });
   }
 
+  /* ---------- lookup by Scryfall id ----------
+     edhplay identifies cards by their Scryfall UUID, so the extension needs
+     id -> name. Ids never change, so the map is cached forever. */
+
+  var ID_KEY = 'mtgtracker.ids.v1';
+  var idMap = null;
+
+  function loadIdMap() {
+    if (idMap) { return idMap; }
+    try {
+      idMap = JSON.parse(localStorage.getItem(ID_KEY) || '{}');
+    } catch (e) {
+      idMap = {};
+    }
+    return idMap;
+  }
+
+  function saveIdMap() {
+    try {
+      localStorage.setItem(ID_KEY, JSON.stringify(idMap));
+    } catch (e) {
+      idMap = {};
+    }
+  }
+
+  /**
+   * @param {string[]} ids Scryfall UUIDs
+   * @returns {Promise<Object>} id -> card name, for everything resolvable
+   */
+  function namesForIds(ids) {
+    loadIdMap();
+
+    var unique = [];
+    var seen = {};
+    ids.forEach(function (id) {
+      var k = String(id).toLowerCase();
+      if (k && !seen[k]) { seen[k] = true; unique.push(k); }
+    });
+
+    var needed = unique.filter(function (id) { return !idMap[id]; });
+    var batches = [];
+    for (var i = 0; i < needed.length; i += BATCH) { batches.push(needed.slice(i, i + BATCH)); }
+
+    var chain = Promise.resolve();
+    batches.forEach(function (batch, bi) {
+      chain = chain.then(function () {
+        return bi > 0 ? sleep(GAP_MS) : null;
+      }).then(function () {
+        return fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            identifiers: batch.map(function (id) { return { id: id }; })
+          })
+        }).then(function (res) {
+          if (!res.ok) { throw new Error('Scryfall responded ' + res.status); }
+          return res.json();
+        }).then(function (data) {
+          (data.data || []).forEach(function (card) {
+            idMap[String(card.id).toLowerCase()] = card.name;
+            // Bank the full card too, so a deck built this way needs no second trip.
+            cache[key(card.name)] = trim(card);
+          });
+        });
+      }).catch(function () { /* offline: resolve what we already know */ });
+    });
+
+    return chain.then(function () {
+      saveIdMap();
+      saveCache();
+      var out = {};
+      unique.forEach(function (id) { if (idMap[id]) { out[id] = idMap[id]; } });
+      return out;
+    });
+  }
+
   function getCached(name) {
     loadCache();
     return cache[key(name)] || null;

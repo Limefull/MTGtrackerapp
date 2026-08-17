@@ -1164,6 +1164,9 @@
     $('#set-opp').checked = !!state.settings.showOpponentTurns;
     $('#set-questions').checked = !!state.settings.turnQuestions;
     $('#set-sweep').checked = !!state.settings.endTurnSweep;
+    $('#set-autotrack').checked = !!state.settings.autoTrack;
+    var row = $('#row-autotrack');
+    if (row) { row.classList.toggle('hidden', !(global.MTGBridge && global.MTGBridge.available)); }
     $('#cache-info').textContent = Scry.cacheSize() + ' cards cached.';
     $('#version-line').textContent = 'Version ' + VERSION;
   }
@@ -1342,6 +1345,7 @@
     bindToggle('#set-opp', 'showOpponentTurns');
     bindToggle('#set-questions', 'turnQuestions');
     bindToggle('#set-sweep', 'endTurnSweep');
+    bindToggle('#set-autotrack', 'autoTrack');
 
     $('#btn-clear-cache').addEventListener('click', function () {
       if (!confirm('Clear cached card text? You will need a connection to reload it.')) { return; }
@@ -1439,11 +1443,85 @@
     });
   }
 
+  /* ---------------- live board from edhplay ---------------- */
+
+  // Zones the page reports, mapped onto the app's own names.
+  var EDH_ZONES = {
+    battlefield: 'battlefield',
+    graveyard: 'graveyard',
+    exile: 'exile',
+    hand: 'hand',
+    command: 'command',
+    commander: 'command'
+  };
+
+  var lastSnapshotKey = '';
+
+  function startBoardBridge() {
+    if (!global.MTGBridge || !global.MTGBridge.available) { return; }
+    global.MTGBridge.subscribe(function (snap) {
+      if (!state.settings.autoTrack) { return; }
+      applySnapshot(snap);
+    });
+  }
+
+  function applySnapshot(snap) {
+    var deck = activeDeck();
+    if (!deck || !state.game || !snap || !snap.cards) { return; }
+
+    // Only your own cards; opponents' boards are not in your decklist anyway.
+    var mine = snap.cards.filter(function (c) {
+      return (!snap.self || c.player === snap.self) && EDH_ZONES[c.zone];
+    });
+
+    var fingerprint = mine.map(function (c) { return c.cardId + ':' + c.zone; }).sort().join('|');
+    if (fingerprint === lastSnapshotKey) { return; }
+    lastSnapshotKey = fingerprint;
+
+    Scry.namesForIds(mine.map(function (c) { return c.scryfallId; })).then(function (names) {
+      var wanted = {};        // deck card name -> list of app zones
+      mine.forEach(function (c) {
+        var name = names[String(c.scryfallId).toLowerCase()];
+        if (!name) { return; }
+        (wanted[name] = wanted[name] || []).push(EDH_ZONES[c.zone]);
+      });
+
+      var g = state.game;
+      g.autoKeys = g.autoKeys || {};
+      var stillHere = {};
+      var changed = false;
+
+      deck.entries.forEach(function (entry) {
+        var zonesForCard = wanted[entry.name] || [];
+        for (var i = 0; i < entry.qty; i++) {
+          var k = instKey(entry.name, i);
+          var target = zonesForCard[i] || null;
+
+          if (target) {
+            stillHere[k] = 1;
+            if (zoneOf(k) !== target) { setZone(k, target); changed = true; }
+            g.autoKeys[k] = 1;
+          } else if (g.autoKeys[k]) {
+            // It was placed automatically and the page no longer shows it.
+            if (zoneOf(k) !== 'deck') { setZone(k, 'deck'); changed = true; }
+            delete g.autoKeys[k];
+          }
+        }
+      });
+
+      if (changed) {
+        persist();
+        renderPlay();
+      }
+    });
+  }
+
   /* ---------------- boot ---------------- */
 
   function init() {
     bind();
     renderDecks();
+    startBoardBridge();
 
     if (state.game && deckById(state.game.deckId)) {
       hydrate(deckById(state.game.deckId));

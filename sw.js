@@ -12,6 +12,7 @@ var SHELL_FILES = [
   './js/data.js',
   './js/parse.js',
   './js/scryfall.js',
+  './js/bridge.js',
   './js/mana.js',
   './js/triggers.js',
   './js/store.js',

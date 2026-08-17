@@ -30,6 +30,7 @@ jobs:
             Object.values((m.action || {}).default_icon || {}).forEach(p => refs.add(p));
             refs.add(m.background.service_worker);
             refs.add(m.side_panel.default_path);
+            (m.content_scripts || []).forEach(cs => (cs.js || []).forEach(p => refs.add(p)));
             for (const p of refs) {
               if (!fs.existsSync('extension/' + p)) { throw new Error('missing file: ' + p); }
             }
