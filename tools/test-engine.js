@@ -360,6 +360,51 @@ getCards(EXPECT.map(function (e) { return e.name; }).concat(SEQ_CARDS)).then(fun
         zt && Trig.tierState(zt, 5).spent === false);
 
   check('a plain trigger has no tiers', !Trig.parseTiers('Whenever a land enters, draw a card.'));
+  check('the effect keeps its own commas',
+        Trig.parseTiers('Magecraft — Whenever you cast a spell, discard a card, then draw a card. ' +
+          "If this is the second time this ability has resolved this turn, deal 2 damage.")
+          .steps[0].text === 'discard a card, then draw a card');
+  check('a card that only names a later resolution still works',
+        Trig.parseTiers('Whenever a creature enters, scry 1. If this is the second time this ' +
+          'ability has resolved this turn, the Ring tempts you.').max === 2);
+
+  // The other four per-turn wordings, which are far more common than tiers.
+  var PT = [
+    { label: 'for the first time each turn',
+      text: 'Whenever you gain life for the first time each turn, create a 1/1 Cat.',
+      mode: 'first' },
+    { label: 'this ability triggers only once each turn',
+      text: 'Whenever you cast an instant, draw a card. This ability triggers only once each turn.',
+      mode: 'once' },
+    { label: 'your second spell each turn',
+      text: 'Whenever you cast your second spell each turn, put two +1/+1 counters on this creature.',
+      mode: 'nth', n: 2 },
+    { label: 'once during each of your turns',
+      text: 'Once during each of your turns, you may cast an Aura spell from your graveyard.',
+      mode: 'once_turn' }
+  ];
+  PT.forEach(function (c) {
+    var pt = Trig.parsePerTurn(c.text);
+    check('"' + c.label + '" -> ' + c.mode,
+          pt && pt.mode === c.mode && (!c.n || pt.n === c.n), pt ? JSON.stringify(pt.mode) : 'null');
+  });
+
+  var nthPt = Trig.parsePerTurn(PT[2].text);
+  check('an Nth-spell gate is inactive before its number', !Trig.perTurnState(nthPt, 0).active);
+  check('active exactly on its number', Trig.perTurnState(nthPt, 1).active === true);
+  check('and dead afterwards', Trig.perTurnState(nthPt, 2).spent === true);
+
+  var firstPt = Trig.parsePerTurn(PT[0].text);
+  check('a first-time gate fires once then reports done',
+        Trig.perTurnState(firstPt, 0).active && Trig.perTurnState(firstPt, 1).spent);
+
+  check('an activated ability restriction is not treated as a trigger gate',
+        !Trig.parsePerTurn('{T}: Draw a card. Activate only once each turn.'));
+
+  var venture = Trig.analyzeCard({ name: 'Cloister Gargoyle', type_line: 'Artifact Creature',
+    oracle_text: 'When this creature enters, venture into the dungeon.', keywords: [], faces: [] });
+  check('venture cards are flagged so the player is reminded',
+        venture.triggers.some(function (t) { return t.venture; }));
 
   var victorCard = { name: "Victor, Valgavoth's Seneschal", type_line: 'Legendary Creature',
                      oracle_text: victorText, keywords: [], faces: [] };

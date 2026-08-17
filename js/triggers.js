@@ -411,37 +411,56 @@
 
   var ORDINAL = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5 };
   var FIRST_TIME_RE = /\bif this is the first time this ability has resolved this turn\b/i;
+  // "If it's the second time," / "If this is the second time this ability has resolved this turn,"
+  var NTH_TIME_RE = /^If (?:this is|it'?s) the (first|second|third|fourth|fifth) time[^,]*,\s*([\s\S]+?)\.?$/i;
 
   /**
+   * Strip the "Whenever …," condition off the front of a sentence. The first
+   * comma ends the condition; later ones belong to the effect itself
+   * ("discard a card, then draw a card").
+   */
+  function effectOf(sentence) {
+    var effect = sentence.replace(/\s*\.\s*$/, '').trim();
+    var comma = effect.indexOf(', ');
+    return comma === -1 ? effect : effect.slice(comma + 2);
+  }
+
+  /**
+   * Escalating abilities: a different effect on each resolution within a turn.
    * @returns {{steps: Array<{n:number,text:string}>, repeating:boolean, max:number}|null}
    */
   function parseTiers(text) {
-    if (!text || !FIRST_TIME_RE.test(text)) { return null; }
+    if (!text) { return null; }
 
     var steps = [];
-    var sentences = text.split(/(?<=\.)\s+/);
+    var sawOrdinal = false;
 
-    sentences.forEach(function (s) {
-      var sentence = s.trim();
+    text.split(/(?<=\.)\s+/).forEach(function (raw, i) {
+      var sentence = raw.trim();
+      if (!sentence) { return; }
 
-      if (FIRST_TIME_RE.test(sentence)) {
-        // Everything before the "if this is the first time" clause is the
-        // effect; the trigger condition sits before the last comma.
-        var effect = sentence.replace(FIRST_TIME_RE, '').replace(/\s*\.\s*$/, '').trim();
-        var comma = effect.lastIndexOf(', ');
-        if (comma !== -1) { effect = effect.slice(comma + 2); }
-        steps.push({ n: 1, text: effect.replace(/\s+$/, '') || 'Resolve the first mode.' });
+      var m = NTH_TIME_RE.exec(sentence);
+      if (m) {
+        sawOrdinal = true;
+        steps.push({ n: ORDINAL[m[1].toLowerCase()], text: m[2].trim() });
         return;
       }
 
-      var m = /^If it'?s the (first|second|third|fourth|fifth) time,\s*([\s\S]+?)\.?$/i.exec(sentence);
-      if (m) { steps.push({ n: ORDINAL[m[1].toLowerCase()], text: m[2].trim() }); return; }
+      if (FIRST_TIME_RE.test(sentence)) {
+        sawOrdinal = true;
+        steps.push({ n: 1, text: effectOf(sentence.replace(FIRST_TIME_RE, '')) || 'Resolve the first mode.' });
+        return;
+      }
 
       var o = /^Otherwise,\s*([\s\S]+?)\.?$/i.exec(sentence);
-      if (o) { steps.push({ n: 2, text: o[1].trim(), repeating: true }); }
+      if (o) { sawOrdinal = true; steps.push({ n: 2, text: o[1].trim(), repeating: true }); return; }
+
+      // Cards like Elrond state the always-on effect first, then add to it on a
+      // later resolution — keep that opening effect as step one.
+      if (i === 0 && !steps.length) { steps.push({ n: 1, text: effectOf(sentence), base: true }); }
     });
 
-    if (steps.length < 2) { return null; }
+    if (!sawOrdinal || steps.length < 2) { return null; }
     steps.sort(function (a, b) { return a.n - b.n; });
 
     return {
@@ -451,25 +470,97 @@
     };
   }
 
-  /** Which effect a tiered trigger produces on its `times`-th resolution. */
-  function tierState(tiers, times) {
-    if (!tiers) { return null; }
-    var n = Math.max(1, (times || 0) + 1);
-    var capped = Math.min(n, tiers.max);
-    var spent = !tiers.repeating && n > tiers.max;
-    var step = null;
-    tiers.steps.forEach(function (s) { if (s.n === capped) { step = s; } });
+  /**
+   * Every way a card gates or changes itself by how often it has happened this
+   * turn. Modes:
+   *   tiers     — a different effect per resolution (Victor, Elrond)
+   *   first     — "for the first time each turn"
+   *   once      — "This ability triggers only once each turn."
+   *   nth       — "whenever you cast your second spell each turn"
+   *   once_turn — "Once during each of your turns, you may …"
+   */
+  function parsePerTurn(text) {
+    if (!text) { return null; }
+
+    var tiers = parseTiers(text);
+    if (tiers) {
+      return { mode: 'tiers', steps: tiers.steps, max: tiers.max, repeating: tiers.repeating };
+    }
+
+    if (/\bonce during each of your turns\b/i.test(text)) {
+      return { mode: 'once_turn', n: 1, max: 1, label: 'once per turn' };
+    }
+
+    var nth = /\byour (second|third|fourth|fifth) ([a-z ]{0,24}?spells?) each turn\b/i.exec(text);
+    if (nth) {
+      var n = ORDINAL[nth[1].toLowerCase()];
+      return { mode: 'nth', n: n, max: n, what: nth[2].trim(), label: 'on your ' + nth[1].toLowerCase() };
+    }
+
+    if (/\bfor the first time each turn\b/i.test(text)) {
+      return { mode: 'first', n: 1, max: 1, label: 'first time only' };
+    }
+
+    // Deliberately narrow: "Activate only once each turn" is an activated
+    // ability's restriction, not a triggered one.
+    if (/\bthis ability triggers only once each turn\b/i.test(text)) {
+      return { mode: 'once', n: 1, max: 1, label: 'once per turn' };
+    }
+
+    return null;
+  }
+
+  /** What this card does on its `times + 1`-th occurrence in the turn. */
+  function perTurnState(pt, times) {
+    if (!pt) { return null; }
+    var time = Math.max(1, (times || 0) + 1);
+
+    if (pt.mode === 'tiers') {
+      var capped = Math.min(time, pt.max);
+      var spent = !pt.repeating && time > pt.max;
+      var step = null;
+      pt.steps.forEach(function (s) { if (s.n === capped) { step = s; } });
+      return {
+        time: time, max: pt.max, capped: capped, spent: spent, active: !spent,
+        last: time === pt.max,
+        badge: spent ? 'spent' : 'resolution ' + capped + ' of ' + pt.max,
+        text: spent
+          ? 'Already resolved ' + pt.max + ' times this turn — no further effect.'
+          : (step ? step.text : 'No further effect this turn.')
+      };
+    }
+
+    var target = pt.n || 1;
+    var active = time === target;
+    var past = time > target;
+
+    var badge, msg;
+    if (pt.mode === 'nth') {
+      badge = active ? 'triggers now' : (past ? 'done this turn' : time + ' of ' + target);
+      msg = active
+        ? 'This is the ' + (pt.what || 'one') + ' that triggers it.'
+        : past
+          ? 'Already triggered this turn — later ones do nothing.'
+          : 'Not yet: it triggers on number ' + target + ' this turn.';
+    } else if (pt.mode === 'once_turn') {
+      badge = past ? 'used' : 'available';
+      msg = past ? 'Already used this turn.' : 'Not used yet this turn.';
+    } else {
+      badge = past ? 'done this turn' : 'triggers now';
+      msg = past ? 'Already happened this turn — this one does nothing.' : 'This one triggers.';
+    }
 
     return {
-      time: n,
-      max: tiers.max,
-      capped: capped,
-      spent: spent,
-      last: n === tiers.max,
-      text: spent
-        ? 'Already resolved ' + tiers.max + ' times this turn — no further effect.'
-        : (step ? step.text : 'No further effect this turn.')
+      time: time, max: target, capped: Math.min(time, target),
+      spent: past, active: active, last: active,
+      badge: badge, text: msg
     };
+  }
+
+  /** Back-compat: the tiers-only view used by earlier tests. */
+  function tierState(tiers, times) {
+    return perTurnState({ mode: 'tiers', steps: tiers.steps, max: tiers.max,
+                          repeating: tiers.repeating }, times);
   }
 
   /* ---------- per-turn tallies ----------
@@ -563,9 +654,12 @@
           res.conditional = true;
         }
 
-        // "…first time this ability has resolved this turn. If it's the second…"
-        var tiers = parseTiers(res.text);
-        if (tiers) { res.tiers = tiers; }
+        // Anything gated or escalated by how often it happened this turn.
+        var perTurn = parsePerTurn(res.text);
+        if (perTurn) { res.perTurn = perTurn; }
+
+        // Dungeons live outside the deck, so just flag the prompt to venture.
+        if (/venture into the dungeon/i.test(res.text)) { res.venture = true; }
 
         // "for each card you drew this turn" — the questions already count that.
         var tally = tallyLink(res.text);
@@ -684,7 +778,16 @@
     names.forEach(function (name) {
       var a = analysisMap[name];
       if (!a) { return; }
-      a.triggers.forEach(function (t) {
+      a.triggers.concat(a.statics).forEach(function (t) {
+        // Venture is an action you take, not an event, but it still needs a
+        // prompt — the dungeon itself lives outside the deck.
+        if (t.venture) {
+          var vk = 'venture|' + name;
+          if (!seen[vk]) {
+            seen[vk] = true;
+            (groups.venture = groups.venture || []).push({ name: name, trigger: t });
+          }
+        }
         if (t.type !== 'event') { return; }
         var ev = D.EVENT_BY_ID[t.event];
         if (!ev || !ev.ask) { return; }          // self-referential, not a question
@@ -724,9 +827,8 @@
   function needsTracking(analysis) {
     if (!analysis) { return false; }
     if (analysis.sequence) { return true; }
-    return analysis.triggers.some(function (t) {
-      return t.type === 'phase' || !!t.tiers;
-    });
+    var gated = function (t) { return t.type === 'phase' || !!t.perTurn; };
+    return analysis.triggers.some(gated) || analysis.statics.some(function (t) { return !!t.perTurn; });
   }
 
   global.MTGTriggers = {
@@ -742,6 +844,8 @@
     sequenceState: sequenceState,
     parseTiers: parseTiers,
     tierState: tierState,
+    parsePerTurn: parsePerTurn,
+    perTurnState: perTurnState,
     stripReminders: stripReminders
   };
 })(window);

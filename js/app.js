@@ -269,13 +269,13 @@
     persist();
   }
 
-  /** Every escalating trigger on a card currently being tracked. */
+  /** Every per-turn gated ability on a card currently being tracked. */
   function escalating() {
     var out = [];
     activeBoard().forEach(function (it) {
       if (!it.analysis) { return; }
-      it.analysis.triggers.forEach(function (t) {
-        if (t.tiers) { out.push({ item: it, trigger: t }); }
+      it.analysis.triggers.concat(it.analysis.statics).forEach(function (t) {
+        if (t.perTurn) { out.push({ item: it, trigger: t }); }
       });
     });
     return out;
@@ -288,7 +288,11 @@
       if (k.indexOf(g.turn + '|') === 0) { keep[k] = 1; }
     });
     g.resolved = keep;
-    g.answers = {};
+    var keptAnswers = {};
+    Object.keys(g.answers || {}).forEach(function (k) {
+      if (isPersistentQuestion(k)) { keptAnswers[k] = g.answers[k]; }
+    });
+    g.answers = keptAnswers;
     g.tiers = {};
   }
 
@@ -321,6 +325,9 @@
     renderPlay();
     if (!$('#modal-sweep').classList.contains('hidden')) { renderSweep(); }
   }
+
+  // Ventures accumulate across the whole game — the dungeon does not reset.
+  function isPersistentQuestion(eventId) { return eventId === 'venture'; }
 
   function clearAnswer(eventId) {
     if (!state.game.answers) { return; }
@@ -613,6 +620,7 @@
       }
       if (critical && !st) { tags += '<span class="tag danger">must not miss</span>'; }
       if (h.trigger.conditional) { tags += '<span class="tag dim">only if you used it</span>'; }
+      if (h.trigger.venture) { tags += '<span class="tag warn">venture into the dungeon</span>'; }
       if (h.trigger.scope === 'each') { tags += '<span class="tag">every turn</span>'; }
       if (h.item.zone !== 'battlefield') { tags += '<span class="tag dim">' + esc(h.item.zone) + '</span>'; }
 
@@ -626,6 +634,11 @@
       '</button>';
     }).join('');
   }
+
+  var PT_TITLE = {
+    tiers: 'Escalating this turn', first: 'First time each turn',
+    once: 'Once each turn', nth: 'Counts up each turn', once_turn: 'Once per turn'
+  };
 
   var SEQ_TITLE = {
     saga: 'Saga progress', class: 'Class levels', levelup: 'Level', siege: 'Siege defence',
@@ -666,13 +679,14 @@
    */
   function escalatingRow(e) {
     var times = tierCount(e.item.key, e.trigger.id);
-    var ts = Trig.tierState(e.trigger.tiers, times);
+    var ts = Trig.perTurnState(e.trigger.perTurn, times);
 
-    return '<div class="question escalating' + (times ? ' answered' : '') + '">' +
+    return '<div class="question escalating' + (times ? ' answered' : '') +
+      (ts.spent ? ' spent' : '') + '">' +
       '<button class="q-main" data-esc="' + esc(e.item.key + '||' + e.trigger.id) + '">' +
         '<span class="q-ask">' + esc(e.item.name) +
-          '<span class="tag chapter">' +
-            (ts.spent ? 'spent' : 'resolution ' + ts.capped + ' of ' + ts.max) + '</span>' +
+          '<span class="tag ' + (ts.spent ? 'dim' : 'chapter') + '">' + esc(ts.badge) + '</span>' +
+          (e.trigger.venture ? '<span class="tag warn">venture</span>' : '') +
         '</span>' +
         '<span class="q-tier">' + Mana.render(ts.text) + '</span>' +
       '</button>' +
@@ -976,20 +990,23 @@
 
     // Escalating abilities: how many times it has resolved this turn.
     if (a) {
-      a.triggers.filter(function (t) { return t.tiers; }).forEach(function (t) {
-        var ts = Trig.tierState(t.tiers, tierCount(key, t.id));
-        html += '<h3>Escalating this turn</h3>' +
+      a.triggers.concat(a.statics).filter(function (t) { return t.perTurn; }).forEach(function (t) {
+        var pt = t.perTurn;
+        var ts = Trig.perTurnState(pt, tierCount(key, t.id));
+        var steps = pt.steps || [{ n: pt.n || 1, text: t.text }];
+        html += '<h3>' + esc(PT_TITLE[pt.mode] || 'This turn') + '</h3>' +
           '<div class="saga-box">' +
             '<div class="saga-head">' +
               '<button class="btn ghost small" data-tier="-1" data-tid="' + esc(t.id) + '">&minus;</button>' +
-              '<span class="saga-state">Resolution ' + ts.time + ' of ' + ts.max + '</span>' +
+              '<span class="saga-state">' + esc(ts.badge) +
+                '<span class="muted"> · ' + ts.time + ' so far</span></span>' +
               '<button class="btn ghost small" data-tier="1" data-tid="' + esc(t.id) + '">+</button>' +
             '</div>' +
-            t.tiers.steps.map(function (s) {
-              var pos = s.n < ts.time ? ' done' : (s.n === ts.capped && !ts.spent ? ' next' : '');
+            steps.map(function (st) {
+              var pos = st.n < ts.time ? ' done' : (st.n === ts.capped && !ts.spent ? ' next' : '');
               return '<div class="saga-chapter' + pos + '">' +
-                '<span class="sc-num">' + s.n + '</span>' +
-                '<span class="sc-text">' + Mana.render(s.text) + '</span>' +
+                '<span class="sc-num">' + st.n + '</span>' +
+                '<span class="sc-text">' + Mana.render(st.text) + '</span>' +
               '</div>';
             }).join('') +
           '</div>';
@@ -1006,7 +1023,8 @@
           '<div class="dt-when">' + esc(when) +
             (t.scope === 'each' ? ' <span class="tag">every turn</span>' : '') +
             (t.scope === 'opp' ? ' <span class="tag">opponents only</span>' : '') +
-            (t.conditional ? ' <span class="tag dim">only if you used it</span>' : '') + '</div>' +
+            (t.conditional ? ' <span class="tag dim">only if you used it</span>' : '') +
+            (t.venture ? ' <span class="tag warn">venture</span>' : '') + '</div>' +
           '<div class="dt-text">' + Mana.render(t.text) + '</div>' +
         '</div>';
       }).join('');

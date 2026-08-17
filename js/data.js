@@ -48,7 +48,10 @@
     { id: 'targeted',   name: 'Something becomes targeted',  ask: 'Something became a target' },
     { id: 'exiled',     name: 'Cards are exiled',            ask: 'Cards were exiled' },
     { id: 'attacked',   name: 'A creature attacks you',      ask: 'A creature attacked you' },
-    { id: 'other_evt',  name: 'Other triggered ability',     ask: 'Something else happened' }
+    { id: 'other_evt',  name: 'Other triggered ability',     ask: 'Something else happened' },
+    // Dungeons live outside the deck, so the app only counts your ventures and
+    // reminds you which cards cause them.
+    { id: 'venture',    name: 'Venture into the dungeon',    ask: 'Venture into the dungeon' }
   ];
 
   var EVENT_BY_ID = {};

@@ -627,3 +627,4 @@ a { color: var(--accent); }
 }
 .sc-cost { display: block; margin-top: 3px; font-size: 12px; }
 .saga-chapter .sc-num { white-space: nowrap; }
+.question.escalating.spent { border-left-color: var(--border); opacity: .62; }

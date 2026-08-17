@@ -86,12 +86,29 @@ it, cast it free, exile and flip it. Ticking the trigger off is what moves the
 counter; the card sheet also has −/+ buttons for when the table and the app
 drift apart.
 
-**Escalating abilities know which resolution you're on.** Victor, Valgavoth's
-Seneschal does something different the first, second and third time his ability
-resolves each turn. Tap it as it resolves and the app shows *that* effect,
-tagged `resolution 2 of 3`, then reports it spent once the sequence runs out.
-The count resets with the turn. An `Otherwise` clause is understood as a
-repeating final step, so Zimone keeps working past resolution two.
+**Abilities gated by how often they happened this turn.** A large family of
+cards does something different — or nothing at all — depending on how many times
+it has already happened this turn. Tap the card as it resolves and the app tells
+you what *this* one does:
+
+| Wording | Behaviour | Cards |
+| --- | --- | --- |
+| "…if this is the first time this ability has resolved this turn. If it's the second time…" | a different effect per resolution | ~7 |
+| "for the first time each turn" | fires once, then reports done | ~47 |
+| "This ability triggers only once each turn." | same, stated differently | ~143 |
+| "whenever you cast your second spell each turn" | counts up, fires only on that one | ~53 |
+| "Once during each of your turns, you may…" | shows available or already used | ~24 |
+
+All of them reset with the turn. An `Otherwise` clause is read as a repeating
+final step, so Zimone keeps working past resolution two, and a card that names
+only a later resolution — Elrond's "if this is the second time" — still gets its
+opening effect as step one.
+
+**Venture is a prompt, not a simulation.** Dungeons live outside the deck and
+their rooms branch, so the app does not model them. Instead any card that says
+*venture into the dungeon* is flagged, and a **Venture into the dungeon** prompt
+lists those cards and counts how many times you have ventured. That count is the
+one thing that does not reset each turn, because the dungeon doesn't either.
 
 **Real mana symbols.** Costs and rules text render with proper symbol art
 instead of `{2}{W}{U}` — in the card detail, the trigger list and the trigger
@@ -202,8 +219,6 @@ It reads oracle text with regular expressions, not a rules engine. So:
 - **Delayed triggers are marked, not tracked.** "Sacrifice it at the beginning
   of the next end step" only exists if you used the ability that made it, so it
   is tagged *only if you used it* rather than firing every turn.
-- **Dungeons are not tracked.** They live outside the game rather than in the
-  decklist, and their rooms branch, so venture effects show their text only.
 - **Computed quantities are not calculated.** A card that cares about "each card
   you drew this turn" is linked to the matching turn question, so the app can
   show the tally you have logged — but it is your tally, not a real count.
