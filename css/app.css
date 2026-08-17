@@ -321,17 +321,43 @@ a { color: var(--accent); }
 .modal-hint { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 
 .board-list { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* A tracked card and its one-tap "it died" button, joined into one pill. */
+.board-item { display: inline-flex; align-items: stretch; }
 .board-chip {
   appearance: none; cursor: pointer; font: inherit; font-size: 13px;
   background: var(--bg-panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: 20px;
-  padding: 7px 12px; min-height: 36px;
+  border: 1px solid var(--border); border-radius: 20px 0 0 20px;
+  padding: 7px 10px 7px 13px; min-height: 38px;
 }
 .board-chip:hover { background: var(--bg-hover); }
-.board-chip.zone-graveyard { opacity: .6; border-style: dashed; }
-.board-chip.zone-exile { opacity: .5; border-style: dotted; }
 .board-chip.zone-command { border-color: var(--accent); color: #cfe0ff; }
 .board-chip.zone-hand { border-color: #4a4a63; font-style: italic; }
+
+.board-bury {
+  appearance: none; cursor: pointer; font: inherit; font-size: 13px;
+  background: var(--bg-panel); color: var(--muted);
+  border: 1px solid var(--border); border-left: 0;
+  border-radius: 0 20px 20px 0;
+  padding: 0 11px; min-height: 38px;
+}
+.board-bury:hover { background: var(--danger-deep); color: var(--danger); border-color: #5d2b31; }
+.board-bury.revive:hover { background: var(--accent-deep); color: var(--accent); border-color: #2f4570; }
+
+/* Cards that have left play: dimmed, and one tap from coming back. */
+.gone-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  width: 100%; margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.gone-label {
+  font-size: 10.5px; font-weight: 650; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--muted);
+}
+.board-chip.gone { opacity: .5; border-style: dashed; }
+.board-chip.gone:hover { opacity: .8; }
+.board-item:has(.gone) .board-bury { opacity: .6; }
+.board-item:has(.gone) .board-bury:hover { opacity: 1; }
 
 /* ---------- dock ---------- */
 
@@ -468,6 +494,18 @@ a { color: var(--accent); }
   text-transform: uppercase; letter-spacing: .4px; color: var(--muted);
   white-space: nowrap;
 }
+
+/* ---------- mana symbols ---------- */
+
+.ms {
+  height: 1em; width: 1em;
+  vertical-align: -0.13em;
+  display: inline-block; flex: 0 0 auto;
+}
+.ttext .ms, .dt-text .ms, .sheet-row .ms { height: .95em; width: .95em; }
+.cost { display: inline-flex; gap: 2px; align-items: center; vertical-align: -0.1em; }
+.cost .ms { height: 1.1em; width: 1.1em; }
+.oracle .ms { height: 1.05em; width: 1.05em; vertical-align: -0.18em; }
 
 .detail-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
 .detail-art {

@@ -7,6 +7,7 @@
   var Scry = global.MTGScryfall;
   var Trig = global.MTGTriggers;
   var Store = global.MTGStore;
+  var Mana = global.MTGMana;
 
   var VERSION = '1.0.0';
   var ZONES = [
@@ -162,13 +163,33 @@
     return out;
   }
 
-  /** First copy of a card still in the library, or null when all are out. */
+  // Zones a card is no longer tracked from — it has left the board, but it can
+  // come back (reanimation, flashback, blink), so those copies stay reusable.
+  var GONE_ZONES = { graveyard: 1, exile: 1 };
+
+  /**
+   * A copy of this card that could be put into play: an untouched one from the
+   * library first, otherwise one that already died or got exiled.
+   */
   function freeInstance(entry) {
+    var recycled = null;
     for (var i = 0; i < entry.qty; i++) {
       var k = instKey(entry.name, i);
-      if (zoneOf(k) === 'deck') { return k; }
+      var z = zoneOf(k);
+      if (z === 'deck') { return k; }
+      if (!recycled && GONE_ZONES[z]) { recycled = k; }
     }
-    return null;
+    return recycled;
+  }
+
+  /** Instances still being tracked — on the board, in hand or in the command zone. */
+  function activeBoard() {
+    return board().filter(function (it) { return !GONE_ZONES[it.zone]; });
+  }
+
+  /** Instances that have left play but could return. */
+  function goneBoard() {
+    return board().filter(function (it) { return GONE_ZONES[it.zone]; });
   }
 
   /* ---------------- resolved bookkeeping ---------------- */
@@ -515,7 +536,7 @@
             (h.trigger.scope === 'each' ? '<span class="tag">every turn</span>' : '') +
             (h.item.zone !== 'battlefield' ? '<span class="tag dim">' + esc(h.item.zone) + '</span>' : '') +
           '</span>' +
-          '<span class="ttext">' + esc(h.trigger.text) + '</span>' +
+          '<span class="ttext">' + Mana.render(h.trigger.text) + '</span>' +
         '</span>' +
       '</button>';
     }).join('');
@@ -587,22 +608,49 @@
   }
 
   function renderBoard() {
-    var items = board();
-    $('#board-count').textContent = items.length;
+    var active = activeBoard();
+    var gone = goneBoard();
+    $('#board-count').textContent = active.length;
+
     var host = $('#board-list');
-    if (!items.length) {
+    if (!active.length && !gone.length) {
       host.innerHTML = '<div class="empty small">Tap <b>+ Card</b> only for permanents that fire ' +
         'on their own schedule — upkeep, end step, combat. Everything else is covered by the ' +
         'questions above.</div>';
       return;
     }
-    host.innerHTML = items.map(function (it) {
+
+    var html = active.map(function (it) {
       var n = phaseTriggerCount(it.name);
-      return '<button class="board-chip zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
-        esc(it.name) +
-        (n ? '<span class="pill dim">' + n + '</span>' : '') +
-      '</button>';
+      return '<span class="board-item">' +
+        '<button class="board-chip zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
+          esc(it.name) + (n ? '<span class="pill dim">' + n + '</span>' : '') +
+        '</button>' +
+        '<button class="board-bury" data-bury="' + esc(it.key) + '" ' +
+          'aria-label="Send ' + esc(it.name) + ' to the graveyard" title="To graveyard">&#9013;</button>' +
+      '</span>';
     }).join('');
+
+    if (!active.length) {
+      html = '<div class="empty small">Nothing is being tracked right now.</div>';
+    }
+
+    if (gone.length) {
+      html += '<div class="gone-row">' +
+        '<span class="gone-label">Left play</span>' +
+        gone.map(function (it) {
+          return '<span class="board-item">' +
+            '<button class="board-chip gone zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
+              esc(it.name) +
+            '</button>' +
+            '<button class="board-bury revive" data-revive="' + esc(it.key) + '" ' +
+              'aria-label="Return ' + esc(it.name) + ' to the battlefield" title="Back to play">&#8617;</button>' +
+          '</span>';
+        }).join('') +
+      '</div>';
+    }
+
+    host.innerHTML = html;
   }
 
   /* ---------------- add-card modal ---------------- */
@@ -689,11 +737,12 @@
     '</button>';
   }
 
-  /** Copies of this entry still sitting in the library. */
+  /** Copies of this entry that could be put into play right now. */
   function countAvailable(entry) {
     var free = 0;
     for (var i = 0; i < entry.qty; i++) {
-      if (zoneOf(instKey(entry.name, i)) === 'deck') { free++; }
+      var z = zoneOf(instKey(entry.name, i));
+      if (z === 'deck' || GONE_ZONES[z]) { free++; }
     }
     return free;
   }
@@ -751,7 +800,7 @@
       html += '<div class="detail-top">' +
         (art ? '<img class="detail-art" src="' + esc(art) + '" alt="" loading="lazy" decoding="async">' : '') +
         '<div class="detail-type">' + esc(card.type_line || '') +
-          (card.mana_cost ? '<span class="muted"> ' + esc(card.mana_cost) + '</span>' : '') + '</div>' +
+          (card.mana_cost ? '<span class="cost"> ' + Mana.render(card.mana_cost) + '</span>' : '') + '</div>' +
       '</div>';
     }
 
@@ -764,7 +813,7 @@
           '<div class="dt-when">' + esc(when) +
             (t.scope === 'each' ? ' <span class="tag">every turn</span>' : '') +
             (t.scope === 'opp' ? ' <span class="tag">opponents only</span>' : '') + '</div>' +
-          '<div class="dt-text">' + esc(t.text) + '</div>' +
+          '<div class="dt-text">' + Mana.render(t.text) + '</div>' +
         '</div>';
       }).join('');
     }
@@ -773,7 +822,7 @@
       html += '<h3>Keep in mind</h3>' + a.statics.map(function (s) {
         return '<div class="detail-trigger static">' +
           '<div class="dt-when">' + esc(s.label) + '</div>' +
-          '<div class="dt-text">' + esc(s.text) + '</div>' +
+          '<div class="dt-text">' + Mana.render(s.text) + '</div>' +
         '</div>';
       }).join('');
     }
@@ -782,7 +831,7 @@
       var full = card.faces && card.faces.length
         ? card.faces.map(function (f) { return f.name + '\n' + f.oracle_text; }).join('\n\n')
         : card.oracle_text;
-      html += '<h3>Full text</h3><pre class="oracle">' + esc(full) + '</pre>';
+      html += '<h3>Full text</h3><pre class="oracle">' + Mana.render(full) + '</pre>';
     }
 
     if (!a || !a.hasAny) {
@@ -859,7 +908,7 @@
           '<b>' + esc(r.name) + '</b>' +
           (r.t.scope === 'each' ? '<span class="tag">every turn</span>' : '') +
           (r.t.critical ? '<span class="tag danger">must not miss</span>' : '') +
-          '<span class="muted">' + esc(r.t.text) + '</span>' +
+          '<span class="muted">' + Mana.render(r.t.text) + '</span>' +
         '</div>';
       }).join('') +
     '</section>';
@@ -957,6 +1006,24 @@
     });
 
     $('#board-list').addEventListener('click', function (ev) {
+      var bury = ev.target.closest('[data-bury]');
+      if (bury) {
+        var bk = bury.getAttribute('data-bury');
+        setZone(bk, 'graveyard');
+        buzz(16);
+        renderPlay();
+        toast(bk.split('§')[0] + ' → graveyard. It can be played again from + Card.');
+        return;
+      }
+      var revive = ev.target.closest('[data-revive]');
+      if (revive) {
+        var rk = revive.getAttribute('data-revive');
+        setZone(rk, 'battlefield');
+        buzz(16);
+        renderPlay();
+        toast(rk.split('§')[0] + ' → battlefield');
+        return;
+      }
       var chip = ev.target.closest('[data-inst]');
       if (chip) { openInstance(chip.getAttribute('data-inst')); }
     });

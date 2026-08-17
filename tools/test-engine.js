@@ -177,6 +177,14 @@ getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
   check('Seedborn Muse fires on opponents\' untap', oppUntap.some(function (h) { return h.item.name === 'Seedborn Muse'; }));
   check('Seedborn Muse also listed on your own untap', myUntap.length >= 0);
 
+  // A card in the graveyard has left play, so its battlefield triggers stop.
+  board[1].zone = 'graveyard';
+  check('a card in the graveyard stops firing its upkeep trigger',
+        !Trig.triggersNow(board, 'upkeep', true).some(function (h) { return h.item.name === 'Phyrexian Arena'; }));
+  board[1].zone = 'battlefield';
+  check('and fires again once it is back on the battlefield',
+        Trig.triggersNow(board, 'upkeep', true).some(function (h) { return h.item.name === 'Phyrexian Arena'; }));
+
   var watch = Trig.watchList(board);
   var watched = watch.map(function (g) { return g.event.id; });
   check('cards still in the library are ignored', watched.indexOf('landfall') === -1, watched.join(','));

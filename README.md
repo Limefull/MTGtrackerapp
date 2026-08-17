@@ -58,9 +58,19 @@ Artifacts, Enchantments, Planeswalkers, Battles and Lands. It defaults to
 *All cards* a tap away. Each tile carries a badge with its reminder count, and
 cards already on the board are greyed out.
 
+**Cards that die stop nagging you.** Every tracked card has a one-tap ⏵ button
+that sends it to the graveyard. It drops out of the tracked count, stops firing
+its triggers, and moves to a dimmed *Left play* row — but it stays available in
+the picker, so reanimating or recasting it is one tap. Anything explicitly
+written to work from the yard (flashback, escape, disturb, unearth) keeps
+reminding you.
+
+**Real mana symbols.** Costs and rules text render with proper symbol art
+instead of `{2}{W}{U}` — in the card detail, the trigger list and the trigger
+sheet. Bundled locally, so they work offline.
+
 **Zone tracking.** Move a card between battlefield, graveyard, exile, hand and the
-command zone. Graveyard abilities (flashback, escape, disturb, unearth) surface
-once the card is actually in the yard.
+command zone from the card detail sheet.
 
 **Trigger sheet.** The whole deck's reminders on one page, grouped by phase and
 event — for studying a new list before you sleeve it up.
@@ -191,6 +201,7 @@ css/app.css             dark, thumb-first styling
 js/data.js              phases, events, and the trigger rule tables
 js/parse.js             decklist text -> card entries
 js/scryfall.js          card lookup + localStorage cache
+js/mana.js              {W}{2/U}{T} notation -> symbol art
 js/triggers.js          oracle text -> structured reminders
 js/store.js             persistence
 js/app.js               screens, game loop, rendering
@@ -206,7 +217,9 @@ modules, so the app also runs straight from the filesystem.
 
 ## Credits
 
-Card data from [Scryfall](https://scryfall.com).
+Card data from [Scryfall](https://scryfall.com). Mana symbol art in `img/mana/`
+comes from the companion `custom-mtg-cards` project; `js/mana.js` carries the
+list of available filenames, so regenerate that list if you add or remove art.
 
 Unofficial fan content. Not affiliated with, endorsed, or sponsored by Wizards of
 the Coast. Magic: The Gathering is a trademark of Wizards of the Coast LLC.
