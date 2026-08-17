@@ -65,6 +65,14 @@ the picker, so reanimating or recasting it is one tap. Anything explicitly
 written to work from the yard (flashback, escape, disturb, unearth) keeps
 reminding you.
 
+**Sagas know which chapter they're on.** A Saga's trigger is different every
+turn, so the app keeps a lore counter per copy and shows the chapter that fires
+*now* — its actual text, tagged `chapter II of III`. Ticking it off adds the
+counter. The last chapter is flagged before it happens, and once it's done the
+row turns red and says **sacrifice it**. The card sheet lists every chapter with
+the finished ones struck through, plus −/+ buttons to fix the count if the table
+state and the app drift apart.
+
 **Real mana symbols.** Costs and rules text render with proper symbol art
 instead of `{2}{W}{U}` — in the card detail, the trigger list and the trigger
 sheet. Bundled locally, so they work offline.
@@ -171,6 +179,12 @@ It reads oracle text with regular expressions, not a rules engine. So:
 - **Activated abilities are not triggers** and are not tracked. Sakura-Tribe
   Elder's sacrifice ability won't appear — the full card text is always one tap
   away in the card detail view.
+- **Delayed triggers are marked, not tracked.** "Sacrifice it at the beginning
+  of the next end step" only exists if you used the ability that made it, so it
+  is tagged *only if you used it* rather than firing every turn.
+- **Sagas are the only sequence the app follows automatically.** Other cards
+  whose text changes as they trigger — dungeons, level-up Classes, "the second
+  time each turn" clauses — show their full text but do not advance state.
 - **Abilities granted by other permanents** aren't propagated. If an anthem gives
   your team a trigger, only the anthem itself is flagged.
 - **Unusual wordings can be missed or land in the wrong bucket.** The trigger

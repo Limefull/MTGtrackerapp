@@ -89,7 +89,8 @@ var EXPECT = [
   // Mikaeus grants undying rather than triggering himself; his only real
   // trigger is the damage one.
   { name: 'Mikaeus, the Unhallowed', kind: 'event', bucket: 'damage_evt' },
-  { name: 'Avenger of Zendikar',     kind: 'event', bucket: 'etb_self' }
+  { name: 'Avenger of Zendikar',     kind: 'event', bucket: 'etb_self' },
+  { name: 'Charming Prince',         kind: 'event', bucket: 'etb_self' }
 ];
 
 var CACHE = path.join(__dirname, 'test-cards.json');
@@ -232,7 +233,57 @@ getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
   check('questions work with nothing tracked',
         Trig.deckQuestions(['Lotus Cobra'], soloMap).length === 1);
 
-  /* ---- 5. every phase id referenced by a rule exists ---- */
+  /* ---- 5. sagas and other abilities whose text changes per trigger ---- */
+
+  console.log('\nSagas and multi-part abilities');
+
+  var saga = Trig.parseSaga(
+    '(As this Saga enters and after your draw step, add a lore counter.)\n' +
+    'I — Do the first thing.\n' +
+    'II, III — Do the shared thing.'
+  );
+  check('chapters are parsed', saga && saga.max === 3, saga && JSON.stringify(saga.chapters));
+  check('a shared "II, III" line fills both chapters',
+        saga && saga.chapters[2] === 'Do the shared thing.' && saga.chapters[3] === saga.chapters[2]);
+  check('chapter I is next at zero lore', Trig.sagaChapter(saga, 0).chapter === 1);
+  check('chapter III is next at two lore', Trig.sagaChapter(saga, 2).chapter === 3);
+  check('the last chapter is flagged', Trig.sagaChapter(saga, 2).last === true);
+  check('past the last chapter it says sacrifice', Trig.sagaChapter(saga, 3).done === true);
+  check('reminder text never becomes a chapter', !saga.chapters[0]);
+
+  var urza = cards["urza's saga"];
+  if (urza) {
+    var ua = Trig.analyzeCard(urza);
+    var sagaTriggers = ua.triggers.filter(function (t) { return t.saga; });
+    check('a Saga gets exactly one main-phase trigger carrying its chapters',
+          sagaTriggers.length === 1 && sagaTriggers[0].phase === 'main1',
+          ua.triggers.map(function (t) { return t.phase || t.event; }).join(','));
+    check('and its chapter text is attached',
+          sagaTriggers[0].saga && sagaTriggers[0].saga.max === 3,
+          JSON.stringify(sagaTriggers[0].saga && sagaTriggers[0].saga.max));
+    // An ability quoted inside a chapter must not leak out as its own trigger.
+    check('abilities quoted inside a chapter do not leak out',
+          !ua.triggers.some(function (t) { return t.phase === 'attack'; }),
+          ua.triggers.map(function (t) { return t.phase || t.event; }).join(','));
+  } else {
+    failures++; console.log("  FAIL Urza's Saga not fetched");
+  }
+
+  var prince = cards['charming prince'];
+  if (prince) {
+    var pa = Trig.analyzeCard(prince);
+    var etb = pa.triggers.filter(function (t) { return t.event === 'etb_self'; })[0];
+    check('a modal trigger keeps all of its modes',
+          etb && (etb.text.match(/[•·]/g) || []).length === 3,
+          etb ? JSON.stringify(etb.text) : 'no etb trigger');
+    check('and its modes do not become separate triggers',
+          pa.triggers.length === 1,
+          pa.triggers.map(function (t) { return t.phase || t.event; }).join(','));
+  } else {
+    failures++; console.log('  FAIL Charming Prince not fetched');
+  }
+
+  /* ---- 6. every phase id referenced by a rule exists ---- */
 
   console.log('\nData integrity');
   var badPhase = Data.PHASE_RULES.filter(function (r) { return !Data.PHASE_BY_ID[r.phase]; });

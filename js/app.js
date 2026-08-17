@@ -203,9 +203,48 @@
 
   function toggleResolved(hit) {
     var k = resolvedKey(hit);
-    if (state.game.resolved[k]) { delete state.game.resolved[k]; }
-    else { state.game.resolved[k] = 1; }
+    var nowResolved;
+    if (state.game.resolved[k]) { delete state.game.resolved[k]; nowResolved = false; }
+    else { state.game.resolved[k] = 1; nowResolved = true; }
+
+    // Ticking off a Saga chapter is what puts the lore counter on it. Clamp to
+    // the last chapter so re-ticking the "sacrifice it" row cannot run past it.
+    if (hit.trigger.saga) {
+      var max = hit.trigger.saga.max || 0;
+      var next = loreOf(hit.item.key) + (nowResolved ? 1 : -1);
+      setLore(hit.item.key, Math.max(0, Math.min(next, max)));
+    }
     persist();
+  }
+
+  /* ---------------- lore counters ---------------- */
+
+  function loreOf(key) {
+    var c = state.game && state.game.counters;
+    return (c && c[key]) || 0;
+  }
+
+  function setLore(key, n) {
+    if (!state.game) { return; }
+    state.game.counters = state.game.counters || {};
+    if (n <= 0) { delete state.game.counters[key]; }
+    else { state.game.counters[key] = n; }
+    persist();
+  }
+
+  /**
+   * The chapter a Saga is showing right now. Once the row is ticked the counter
+   * has already advanced, so step back one to keep the row showing what was run.
+   */
+  function chapterFor(trigger, key, alreadyDone) {
+    if (!trigger.saga) { return null; }
+    var lore = loreOf(key) - (alreadyDone ? 1 : 0);
+    return Trig.sagaChapter(trigger.saga, Math.max(0, lore));
+  }
+
+  function sagaOf(name) {
+    var a = analysis[name];
+    return a && a.saga ? a.saga : null;
   }
 
   function pruneResolved() {
@@ -383,7 +422,7 @@
     hydrate(deck);
     if (!state.game || state.game.deckId !== deck.id) {
       state.game = { deckId: deck.id, turn: 1, phaseIndex: 1, myTurn: true,
-                     zones: {}, resolved: {}, answers: {} };
+                     zones: {}, resolved: {}, answers: {}, counters: {} };
       // Commanders start where you can see them.
       deck.entries.forEach(function (e) {
         if (e.isCommander) { state.game.zones[instKey(e.name, 0)] = 'command'; }
@@ -527,20 +566,35 @@
 
     host.innerHTML = hits.map(function (h) {
       var done = isResolved(h);
-      return '<button class="trigger' + (done ? ' done' : '') + (h.trigger.critical ? ' critical' : '') + '"' +
+      var ch = chapterFor(h.trigger, h.item.key, done);
+      var text = ch ? ch.text : h.trigger.text;
+      var critical = h.trigger.critical || (ch && ch.done);
+
+      var tags = '';
+      if (ch) {
+        tags += ch.done
+          ? '<span class="tag danger">sacrifice it</span>'
+          : '<span class="tag chapter">chapter ' + roman(ch.chapter) + ' of ' + roman(ch.max) + '</span>' +
+            (ch.last ? '<span class="tag warn">final chapter</span>' : '');
+      }
+      if (critical && !ch) { tags += '<span class="tag danger">must not miss</span>'; }
+      if (h.trigger.conditional) { tags += '<span class="tag dim">only if you used it</span>'; }
+      if (h.trigger.scope === 'each') { tags += '<span class="tag">every turn</span>'; }
+      if (h.item.zone !== 'battlefield') { tags += '<span class="tag dim">' + esc(h.item.zone) + '</span>'; }
+
+      return '<button class="trigger' + (done ? ' done' : '') + (critical ? ' critical' : '') + '"' +
         ' data-hit="' + esc(h.item.key + '||' + h.trigger.id) + '">' +
         '<span class="tick">' + (done ? '&#10003;' : '') + '</span>' +
         '<span class="tbody">' +
-          '<span class="tname">' + esc(h.item.name) +
-            (h.trigger.critical ? '<span class="tag danger">must not miss</span>' : '') +
-            (h.trigger.scope === 'each' ? '<span class="tag">every turn</span>' : '') +
-            (h.item.zone !== 'battlefield' ? '<span class="tag dim">' + esc(h.item.zone) + '</span>' : '') +
-          '</span>' +
-          '<span class="ttext">' + Mana.render(h.trigger.text) + '</span>' +
+          '<span class="tname">' + esc(h.item.name) + tags + '</span>' +
+          '<span class="ttext">' + Mana.render(text) + '</span>' +
         '</span>' +
       '</button>';
     }).join('');
   }
+
+  var ROMAN_OUT = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+  function roman(n) { return ROMAN_OUT[n] || String(n); }
 
   function renderWatch() {
     var host = $('#watch-list');
@@ -622,9 +676,14 @@
 
     var html = active.map(function (it) {
       var n = phaseTriggerCount(it.name);
+      var saga = sagaOf(it.name);
+      var badge = saga
+        ? '<span class="pill chapter-pill">' + (loreOf(it.key) >= saga.max
+            ? 'done' : roman(loreOf(it.key) + 1)) + '</span>'
+        : (n ? '<span class="pill dim">' + n + '</span>' : '');
       return '<span class="board-item">' +
         '<button class="board-chip zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
-          esc(it.name) + (n ? '<span class="pill dim">' + n + '</span>' : '') +
+          esc(it.name) + badge +
         '</button>' +
         '<button class="board-bury" data-bury="' + esc(it.key) + '" ' +
           'aria-label="Send ' + esc(it.name) + ' to the graveyard" title="To graveyard">&#9013;</button>' +
@@ -804,15 +863,45 @@
       '</div>';
     }
 
+    // Sagas get an explicit lore counter you can correct by hand.
+    var saga = sagaOf(name);
+    if (saga) {
+      var lore = loreOf(key);
+      var cur = Trig.sagaChapter(saga, lore);
+      html += '<h3>Saga progress</h3>' +
+        '<div class="saga-box">' +
+          '<div class="saga-head">' +
+            '<button class="btn ghost small" data-lore="-1" aria-label="Remove a lore counter">&minus;</button>' +
+            '<span class="saga-state">' +
+              (cur.done
+                ? 'All ' + roman(saga.max) + ' chapters done — sacrifice it'
+                : 'Next: chapter ' + roman(cur.chapter) + ' of ' + roman(saga.max)) +
+              '<span class="muted"> · ' + lore + ' lore counter' + (lore === 1 ? '' : 's') + '</span>' +
+            '</span>' +
+            '<button class="btn ghost small" data-lore="1" aria-label="Add a lore counter">+</button>' +
+          '</div>' +
+          Object.keys(saga.chapters).map(Number).sort(function (x, y) { return x - y; })
+            .map(function (n) {
+              var state2 = n <= lore ? ' done' : (n === lore + 1 ? ' next' : '');
+              return '<div class="saga-chapter' + state2 + '">' +
+                '<span class="sc-num">' + roman(n) + '</span>' +
+                '<span class="sc-text">' + Mana.render(saga.chapters[n]) + '</span>' +
+              '</div>';
+            }).join('') +
+        '</div>';
+    }
+
     if (a && a.triggers.length) {
       html += '<h3>Triggers</h3>' + a.triggers.map(function (t) {
         var when = t.type === 'phase'
           ? (D.PHASE_BY_ID[t.phase] ? D.PHASE_BY_ID[t.phase].name : t.phase)
           : (D.EVENT_BY_ID[t.event] ? D.EVENT_BY_ID[t.event].name : t.event);
+        if (t.saga) { return ''; }   // shown by the Saga progress block above
         return '<div class="detail-trigger' + (t.critical ? ' critical' : '') + '">' +
           '<div class="dt-when">' + esc(when) +
             (t.scope === 'each' ? ' <span class="tag">every turn</span>' : '') +
-            (t.scope === 'opp' ? ' <span class="tag">opponents only</span>' : '') + '</div>' +
+            (t.scope === 'opp' ? ' <span class="tag">opponents only</span>' : '') +
+            (t.conditional ? ' <span class="tag dim">only if you used it</span>' : '') + '</div>' +
           '<div class="dt-text">' + Mana.render(t.text) + '</div>' +
         '</div>';
       }).join('');
@@ -1066,6 +1155,15 @@
       var chip = ev.target.closest('[data-zone]');
       if (!chip || !detailKey) { return; }
       setZone(detailKey, chip.getAttribute('data-zone'));
+      openInstance(detailKey);
+      renderPlay();
+    });
+    $('#detail-body').addEventListener('click', function (ev) {
+      var step = ev.target.closest('[data-lore]');
+      if (!step || !detailKey) { return; }
+      var saga = sagaOf(detailKey.split('§')[0]);
+      var next = loreOf(detailKey) + parseInt(step.getAttribute('data-lore'), 10);
+      setLore(detailKey, Math.max(0, Math.min(next, saga ? saga.max : next)));
       openInstance(detailKey);
       renderPlay();
     });

@@ -102,6 +102,54 @@
     return base;
   }
 
+  /* ---------- sagas ---------- */
+
+  var ROMAN = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+
+  // "III — Draw a card."  /  "II, III — Draw a card."
+  var CHAPTER_RE = /^([IVX]+(?:\s*,\s*[IVX]+)*)\s*[—–-]\s*([\s\S]+)$/;
+
+  /**
+   * Pull the chapter abilities out of a Saga's rules text.
+   * @returns {{chapters: Object<number,string>, max: number}|null}
+   */
+  function parseSaga(text) {
+    if (!text) { return null; }
+    var chapters = {};
+    var max = 0;
+
+    text.split(/\n+/).forEach(function (line) {
+      var m = CHAPTER_RE.exec(stripReminders(line).trim());
+      if (!m) { return; }
+      var body = m[2].trim();
+      m[1].split(',').forEach(function (num) {
+        var n = ROMAN[num.trim().toUpperCase()];
+        if (!n) { return; }
+        chapters[n] = body;
+        if (n > max) { max = n; }
+      });
+    });
+
+    return max ? { chapters: chapters, max: max } : null;
+  }
+
+  /** Which chapter fires next, and what it says. */
+  function sagaChapter(saga, loreDone) {
+    if (!saga) { return null; }
+    var next = (loreDone || 0) + 1;
+    if (next > saga.max) {
+      return { chapter: null, done: true, max: saga.max,
+               text: 'Final chapter is finished — sacrifice this Saga.' };
+    }
+    return {
+      chapter: next,
+      done: false,
+      max: saga.max,
+      last: next === saga.max,
+      text: saga.chapters[next] || 'Run chapter ' + next + '.'
+    };
+  }
+
   /* ---------- whole-card analysis ---------- */
 
   /**
@@ -124,8 +172,36 @@
       blocks.push({ text: card.oracle_text, name: card.name, type: card.type_line || '' });
     }
 
+    // Sagas run a sequence, so their chapter lines are parsed separately below
+    // and must not be classified as ordinary abilities — otherwise an ability
+    // quoted inside a chapter leaks out as a trigger of its own.
+    var isSaga = /\bSaga\b/.test(card.type_line || '');
+    var sagaBlock = null;
+    if (isSaga) {
+      blocks.forEach(function (b) {
+        if (!sagaBlock && /\bSaga\b/.test(b.type || '')) { sagaBlock = b; }
+      });
+      sagaBlock = sagaBlock || blocks[0] || null;
+    }
+
     blocks.forEach(function (block) {
+      var lastTrigger = null;
+
       block.text.split(/\n+/).forEach(function (line) {
+        var trimmed = line.trim();
+        if (!trimmed) { return; }
+
+        if (isSaga && CHAPTER_RE.test(stripReminders(trimmed))) { return; }
+
+        // "• Scry 2." is a mode of the trigger above it, not its own ability.
+        if (/^[•·]/.test(trimmed)) {
+          if (lastTrigger) {
+            lastTrigger.text += '\n' + stripReminders(trimmed);
+            lastTrigger.modal = true;
+          }
+          return;
+        }
+
         var res = classify(line, block.name || card.name, idx);
         if (!res) { return; }
         var dedupe = res.text.toLowerCase();
@@ -133,12 +209,24 @@
         seenText[dedupe] = true;
         res.id = card.name + '#' + (idx++);
         res.face = block.name !== card.name ? block.name : null;
-        if (res.type === 'static') { statics.push(res); } else { triggers.push(res); }
+
+        // A delayed trigger only exists if you used the ability that made it.
+        if (/\bthe next (end step|upkeep|turn|combat)\b/.test(res.text.toLowerCase())) {
+          res.conditional = true;
+        }
+
+        if (res.type === 'static') { statics.push(res); lastTrigger = null; }
+        else { triggers.push(res); lastTrigger = res; }
       });
     });
 
-    // Sagas tick in your precombat main phase — that is not in the oracle text.
-    if (/\bSaga\b/.test(card.type_line || '')) {
+    // Sagas tick in your precombat main phase — that is not in the oracle text,
+    // and the chapter changes every turn, so the app tracks the lore count and
+    // fills the real chapter text in at render time.
+    var saga = null;
+    if (isSaga) {
+      saga = parseSaga((sagaBlock || {}).text);
+
       triggers.push({
         id: card.name + '#saga',
         type: 'phase',
@@ -146,7 +234,8 @@
         scope: 'you',
         zones: ['battlefield'],
         critical: false,
-        text: 'Put a lore counter on this Saga, then run that chapter ability.'
+        saga: saga || { chapters: {}, max: 0 },
+        text: 'Add a lore counter, then run that chapter.'
       });
     }
 
@@ -186,6 +275,7 @@
       triggers: triggers,
       statics: statics,
       keywords: keywords,
+      saga: saga,
       hasAny: triggers.length > 0 || statics.length > 0
     };
   }
@@ -283,6 +373,8 @@
     watchList: watchList,
     deckQuestions: deckQuestions,
     needsTracking: needsTracking,
+    parseSaga: parseSaga,
+    sagaChapter: sagaChapter,
     stripReminders: stripReminders
   };
 })(window);

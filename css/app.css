@@ -226,7 +226,11 @@ a { color: var(--accent); }
 .trigger.done .tick { border-color: var(--good); }
 .tbody { min-width: 0; }
 .tname { display: block; font-weight: 640; margin-bottom: 3px; }
-.ttext { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.4; }
+/* pre-line keeps the modes of a "choose one —" trigger on their own lines. */
+.ttext {
+  display: block; color: var(--muted);
+  font-size: 13.5px; line-height: 1.4; white-space: pre-line;
+}
 
 .tag {
   display: inline-block; margin-left: 6px;
@@ -237,6 +241,40 @@ a { color: var(--accent); }
 }
 .tag.danger { background: var(--danger-deep); border-color: #6b3239; color: var(--danger); }
 .tag.dim { opacity: .7; }
+.tag.warn { background: #3a2c12; border-color: #6b5624; color: var(--warn); }
+.tag.chapter { background: var(--accent-deep); border-color: #2f4570; color: #cfe0ff; }
+
+/* ---------- saga progress ---------- */
+
+.saga-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px; margin-bottom: 8px;
+}
+.saga-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.saga-head .btn { min-width: 38px; min-height: 34px; }
+.saga-state { flex: 1; text-align: center; font-size: 13px; font-weight: 620; }
+
+.saga-chapter {
+  display: flex; gap: 9px; align-items: baseline;
+  padding: 6px 0; border-top: 1px solid var(--border-soft);
+  font-size: 13px; color: var(--muted);
+}
+.sc-num {
+  flex: 0 0 26px; text-align: center;
+  font-weight: 700; font-size: 11px; letter-spacing: .5px;
+  color: var(--muted);
+}
+.saga-chapter.done { opacity: .42; }
+.saga-chapter.done .sc-text { text-decoration: line-through; }
+.saga-chapter.next { color: var(--text); }
+.saga-chapter.next .sc-num { color: var(--accent); }
+
+.chapter-pill {
+  background: var(--accent-deep); border-color: #2f4570;
+  color: #cfe0ff; font-size: 10.5px; margin-left: 6px; padding: 1px 7px;
+}
 
 /* ---------- collapsible blocks ---------- */
 
