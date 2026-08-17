@@ -186,6 +186,28 @@ The app appears at `https://<user>.github.io/MTGtrackerapp/` within a minute or 
 **On your phone:** open that URL in the browser and choose *Add to Home Screen*.
 It then launches full-screen and runs offline.
 
+### As a Chrome side panel
+
+For online games — [edhplay.com](https://edhplay.com) and friends — there's a
+Manifest V3 extension that runs the same app in Chrome's side panel, so it sits
+beside the game instead of covering it and stays open as you navigate.
+
+Download **trigger-tracker-extension** from the
+[latest run](https://github.com/Limefull/MTGtrackerapp/actions/workflows/extension.yml),
+unzip it, then in Chrome go to `chrome://extensions`, turn on **Developer mode**,
+choose **Load unpacked** and pick the unzipped folder. Click the toolbar icon
+(or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) to open the panel.
+
+To build it locally instead:
+
+```bash
+node tools/build-extension.js   # then Load unpacked -> extension/
+```
+
+The extension asks for no access to any game site — its only host permissions
+are `api.scryfall.com` and `cards.scryfall.io`, for card text and art. It
+cannot read the page you are playing on.
+
 ### As an Android APK
 
 There is also a real APK, so no hosting is involved at all — every file ships
@@ -291,6 +313,7 @@ js/app.js               screens, game loop, rendering
 js/sample.js            the sample decklist
 sw.js                   offline service worker
 android/                minimal WebView wrapper for the APK build
+extension/              Manifest V3 side-panel extension for Chrome
 tools/                  icon generator, asset bundler and engine tests
 ```
 

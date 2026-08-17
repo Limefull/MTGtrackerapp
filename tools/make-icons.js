@@ -170,6 +170,20 @@ fs.mkdirSync(OUT, { recursive: true });
   console.log('wrote icons/' + spec.file + '  (' + png.length + ' bytes)');
 });
 
+/* ---------- Chrome extension toolbar icons ---------- */
+
+var EXT = path.join(__dirname, '..', 'extension', 'icons');
+if (fs.existsSync(path.join(__dirname, '..', 'extension'))) {
+  fs.mkdirSync(EXT, { recursive: true });
+  [16, 48, 128].forEach(function (size) {
+    // Toolbar icons are tiny, so drop the rounded-square plate and let the
+    // wheel fill the space.
+    fs.writeFileSync(path.join(EXT, 'icon-' + size + '.png'),
+      encodePNG(size, size, draw(size, true)));
+    console.log('wrote extension/icons/icon-' + size + '.png');
+  });
+}
+
 /* ---------- Android launcher icons ---------- */
 
 var RES = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res');

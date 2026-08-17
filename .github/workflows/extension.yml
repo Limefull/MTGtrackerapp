@@ -1,0 +1,54 @@
+name: Build Chrome extension
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bundle the web app into the extension
+        run: node tools/build-extension.js
+
+      - name: Sanity-check the manifest
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8'));
+            if (m.manifest_version !== 3) { throw new Error('not Manifest V3'); }
+            if (m.action && m.action.default_popup) {
+              throw new Error('default_popup blocks the side panel opening on click');
+            }
+            // Every icon the manifest promises has to actually exist.
+            const refs = new Set();
+            Object.values(m.icons || {}).forEach(p => refs.add(p));
+            Object.values((m.action || {}).default_icon || {}).forEach(p => refs.add(p));
+            refs.add(m.background.service_worker);
+            refs.add(m.side_panel.default_path);
+            for (const p of refs) {
+              if (!fs.existsSync('extension/' + p)) { throw new Error('missing file: ' + p); }
+            }
+            console.log('manifest ok — ' + refs.size + ' referenced files present');
+          "
+
+      - name: Zip it
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cd extension
+          zip -qr "../out/trigger-tracker-extension-${GITHUB_RUN_NUMBER}.zip" .
+          cd ..
+          ls -lh out
+
+      - name: Upload extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: trigger-tracker-extension
+          path: out/*.zip
+          if-no-files-found: error
+          retention-days: 90

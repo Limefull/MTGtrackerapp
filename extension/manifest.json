@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "MTG Trigger Tracker",
+  "version": "1.0.0",
+  "description": "Phase-by-phase Magic trigger reminders in a side panel, beside your game on edhplay.com or at the table.",
+  "permissions": [
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://api.scryfall.com/*",
+    "https://cards.scryfall.io/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "side_panel": {
+    "default_path": "app/index.html"
+  },
+  "action": {
+    "default_title": "Open Trigger Tracker",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M"
+      },
+      "description": "Open the Trigger Tracker panel"
+    }
+  }
+}
