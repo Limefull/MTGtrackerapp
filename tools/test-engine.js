@@ -93,6 +93,9 @@ var EXPECT = [
   { name: 'Charming Prince',         kind: 'event', bucket: 'etb_self' }
 ];
 
+// Fetched purely so the sequence checks below have data to work with.
+var SEQ_CARDS = ["Barbarian Class","Student of Warfare","Invasion of Kaladesh","Case of the Crimson Pulse","Blastoderm","Ancestral Vision","Thing in the Ice"];
+
 var CACHE = path.join(__dirname, 'test-cards.json');
 
 function getCards(names) {
@@ -117,11 +120,14 @@ function getCards(names) {
   }).then(function (data) {
     var out = {};
     (data.data || []).forEach(function (c) {
-      out[c.name.toLowerCase()] = {
+      // Double-faced cards come back as "Front // Back"; index the front name
+      // too, exactly as the app's cache does.
+      var front = c.name.split(' // ')[0];
+      out[front.toLowerCase()] = out[c.name.toLowerCase()] = {
         name: c.name, type_line: c.type_line || '', oracle_text: c.oracle_text || '',
-        keywords: c.keywords || [], layout: c.layout,
+        keywords: c.keywords || [], layout: c.layout, defense: c.defense || '',
         faces: (c.card_faces || []).map(function (f) {
-          return { name: f.name, type_line: f.type_line || '', oracle_text: f.oracle_text || '' };
+          return { name: f.name, type_line: f.type_line || '', oracle_text: f.oracle_text || '', defense: f.defense || '' };
         })
       };
     });
@@ -131,7 +137,7 @@ function getCards(names) {
   });
 }
 
-getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
+getCards(EXPECT.map(function (e) { return e.name; }).concat(SEQ_CARDS)).then(function (cards) {
   console.log('\nTrigger classification');
 
   EXPECT.forEach(function (exp) {
@@ -254,13 +260,13 @@ getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
   var urza = cards["urza's saga"];
   if (urza) {
     var ua = Trig.analyzeCard(urza);
-    var sagaTriggers = ua.triggers.filter(function (t) { return t.saga; });
+    var sagaTriggers = ua.triggers.filter(function (t) { return t.sequence; });
     check('a Saga gets exactly one main-phase trigger carrying its chapters',
           sagaTriggers.length === 1 && sagaTriggers[0].phase === 'main1',
           ua.triggers.map(function (t) { return t.phase || t.event; }).join(','));
     check('and its chapter text is attached',
-          sagaTriggers[0].saga && sagaTriggers[0].saga.max === 3,
-          JSON.stringify(sagaTriggers[0].saga && sagaTriggers[0].saga.max));
+          ua.sequence && ua.sequence.kind === 'saga' && ua.sequence.max === 3,
+          JSON.stringify(ua.sequence && ua.sequence.max));
     // An ability quoted inside a chapter must not leak out as its own trigger.
     check('abilities quoted inside a chapter do not leak out',
           !ua.triggers.some(function (t) { return t.phase === 'attack'; }),
@@ -283,7 +289,83 @@ getCards(EXPECT.map(function (e) { return e.name; })).then(function (cards) {
     failures++; console.log('  FAIL Charming Prince not fetched');
   }
 
-  /* ---- 6. every phase id referenced by a rule exists ---- */
+  /* ---- 6. every other sequenced card type ---- */
+
+  console.log('\nOther sequenced card types');
+
+  var SEQ_EXPECT = [
+    { name: 'Barbarian Class',          kind: 'class',      max: 3, dir: 'up',   auto: null },
+    { name: 'Student of Warfare',       kind: 'levelup',    max: 7, dir: 'up',   auto: null },
+    { name: 'Invasion of Kaladesh',     kind: 'siege',      max: 4, dir: 'down', auto: null },
+    { name: 'Case of the Crimson Pulse',kind: 'case',       max: 2, dir: 'up',   auto: 'end' },
+    { name: 'Blastoderm',               kind: 'fading',     max: 3, dir: 'down', auto: 'upkeep' },
+    { name: 'Ancestral Vision',         kind: 'suspend',    max: 4, dir: 'down', auto: 'upkeep' },
+    { name: 'Mystic Remora',            kind: 'cumulative', max: 0, dir: 'up',   auto: 'upkeep' },
+    { name: 'Thing in the Ice',         kind: 'counters',   max: 4, dir: 'down', auto: null }
+  ];
+
+  SEQ_EXPECT.forEach(function (exp) {
+    var c = cards[exp.name.toLowerCase()];
+    if (!c) { failures++; console.log('  FAIL ' + exp.name + ' not fetched'); return; }
+    var s = Trig.analyzeCard(c).sequence;
+    check(exp.name + ' -> ' + exp.kind,
+          s && s.kind === exp.kind && s.max === exp.max && s.dir === exp.dir &&
+          (s.auto || null) === exp.auto,
+          s ? (s.kind + '/max=' + s.max + '/' + s.dir + '/' + (s.auto || 'manual')) : 'no sequence');
+  });
+
+  // A level band covers every level inside it, not just its first.
+  var sow = cards['student of warfare'];
+  if (sow) {
+    var ss = Trig.analyzeCard(sow).sequence;
+    check('a level band applies to every level inside it',
+          Trig.sequenceState(ss, 4).text === Trig.sequenceState(ss, 2).text,
+          JSON.stringify(Trig.sequenceState(ss, 4).text));
+  }
+
+  // Countdowns end at zero and stay there.
+  var blast = cards['blastoderm'];
+  if (blast) {
+    var bs = Trig.analyzeCard(blast).sequence;
+    check('a countdown reaches zero and stops',
+          Trig.sequenceState(bs, 3).done && Trig.sequenceState(bs, 9).counters === 0);
+    check('and warns on its last counter', Trig.sequenceState(bs, 2).last === true);
+  }
+
+  /* ---- 7. escalating (per-turn) triggers ---- */
+
+  console.log('\nEscalating triggers');
+
+  var victorText = "Eerie — Whenever an enchantment you control enters and whenever you " +
+    "fully unlock a Room, surveil 2 if this is the first time this ability has resolved this " +
+    "turn. If it's the second time, each opponent discards a card. If it's the third time, put " +
+    "a creature card from a graveyard onto the battlefield under your control.";
+  var vt = Trig.parseTiers(victorText);
+  check('three resolutions are parsed', vt && vt.max === 3, vt && JSON.stringify(vt.steps));
+  check('the trigger clause is stripped from the first step',
+        vt && vt.steps[0].text === 'surveil 2', vt && JSON.stringify(vt.steps[0]));
+  check('the second step is its own effect',
+        vt && /each opponent discards/.test(vt.steps[1].text));
+  check('resolution 1 of 3 first', Trig.tierState(vt, 0).capped === 1);
+  check('resolution 3 of 3 after two', Trig.tierState(vt, 2).capped === 3);
+  check('a fourth resolution does nothing more', Trig.tierState(vt, 3).spent === true);
+
+  var zimText = 'Landfall — Whenever a land you control enters, manifest dread if this is ' +
+    'the first time this ability has resolved this turn. Otherwise, you may turn a permanent ' +
+    'you control face up.';
+  var zt = Trig.parseTiers(zimText);
+  check('an "Otherwise" clause becomes a repeating second step',
+        zt && zt.repeating === true && zt.max === 2, zt && JSON.stringify(zt.steps));
+  check('and it keeps applying rather than running out',
+        zt && Trig.tierState(zt, 5).spent === false);
+
+  check('a plain trigger has no tiers', !Trig.parseTiers('Whenever a land enters, draw a card.'));
+
+  var victorCard = { name: "Victor, Valgavoth's Seneschal", type_line: 'Legendary Creature',
+                     oracle_text: victorText, keywords: [], faces: [] };
+  check('an escalating card needs tracking', Trig.needsTracking(Trig.analyzeCard(victorCard)));
+
+  /* ---- 8. every phase id referenced by a rule exists ---- */
 
   console.log('\nData integrity');
   var badPhase = Data.PHASE_RULES.filter(function (r) { return !Data.PHASE_BY_ID[r.phase]; });

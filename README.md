@@ -65,13 +65,33 @@ the picker, so reanimating or recasting it is one tap. Anything explicitly
 written to work from the yard (flashback, escape, disturb, unearth) keeps
 reminding you.
 
-**Sagas know which chapter they're on.** A Saga's trigger is different every
-turn, so the app keeps a lore counter per copy and shows the chapter that fires
-*now* — its actual text, tagged `chapter II of III`. Ticking it off adds the
-counter. The last chapter is flagged before it happens, and once it's done the
-row turns red and says **sacrifice it**. The card sheet lists every chapter with
-the finished ones struck through, plus −/+ buttons to fix the count if the table
-state and the app drift apart.
+**Cards whose text changes are tracked, not just listed.** Anything that reads
+differently as counters go on or come off keeps a counter per copy, and the app
+shows the text that applies *right now*:
+
+| Card type | Counter | Advances |
+| --- | --- | --- |
+| Saga | lore | automatically, your precombat main |
+| Class | level | when you pay |
+| Level-up creature | level | when you pay (bands fill their whole range) |
+| Battle — Siege | defense | as it is attacked |
+| Case | solved | prompted at your end step |
+| Vanishing / Fading | time / fade | automatically, your upkeep |
+| Suspend | time | automatically, your upkeep, from exile |
+| Cumulative upkeep | age | automatically, your upkeep |
+| "Enters with N counters" | that counter | by hand |
+
+Countdowns warn on the **last one** and then turn red with what to do — sacrifice
+it, cast it free, exile and flip it. Ticking the trigger off is what moves the
+counter; the card sheet also has −/+ buttons for when the table and the app
+drift apart.
+
+**Escalating abilities know which resolution you're on.** Victor, Valgavoth's
+Seneschal does something different the first, second and third time his ability
+resolves each turn. Tap it as it resolves and the app shows *that* effect,
+tagged `resolution 2 of 3`, then reports it spent once the sequence runs out.
+The count resets with the turn. An `Otherwise` clause is understood as a
+repeating final step, so Zimone keeps working past resolution two.
 
 **Real mana symbols.** Costs and rules text render with proper symbol art
 instead of `{2}{W}{U}` — in the card detail, the trigger list and the trigger
@@ -182,9 +202,11 @@ It reads oracle text with regular expressions, not a rules engine. So:
 - **Delayed triggers are marked, not tracked.** "Sacrifice it at the beginning
   of the next end step" only exists if you used the ability that made it, so it
   is tagged *only if you used it* rather than firing every turn.
-- **Sagas are the only sequence the app follows automatically.** Other cards
-  whose text changes as they trigger — dungeons, level-up Classes, "the second
-  time each turn" clauses — show their full text but do not advance state.
+- **Dungeons are not tracked.** They live outside the game rather than in the
+  decklist, and their rooms branch, so venture effects show their text only.
+- **Computed quantities are not calculated.** A card that cares about "each card
+  you drew this turn" is linked to the matching turn question, so the app can
+  show the tally you have logged — but it is your tally, not a real count.
 - **Abilities granted by other permanents** aren't propagated. If an anthem gives
   your team a trigger, only the anthem itself is flagged.
 - **Unusual wordings can be missed or land in the wrong bucket.** The trigger

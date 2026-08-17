@@ -617,3 +617,13 @@ a { color: var(--accent); }
   animation: rise .18s ease;
 }
 @keyframes rise { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* ---------- escalating triggers ---------- */
+
+.question.escalating { border-left-color: var(--accent); }
+.q-tier {
+  color: var(--muted); font-size: 13px; line-height: 1.35;
+  white-space: pre-line;
+}
+.sc-cost { display: block; margin-top: 3px; font-size: 12px; }
+.saga-chapter .sc-num { white-space: nowrap; }

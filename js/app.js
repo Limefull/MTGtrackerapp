@@ -207,24 +207,27 @@
     if (state.game.resolved[k]) { delete state.game.resolved[k]; nowResolved = false; }
     else { state.game.resolved[k] = 1; nowResolved = true; }
 
-    // Ticking off a Saga chapter is what puts the lore counter on it. Clamp to
-    // the last chapter so re-ticking the "sacrifice it" row cannot run past it.
-    if (hit.trigger.saga) {
-      var max = hit.trigger.saga.max || 0;
-      var next = loreOf(hit.item.key) + (nowResolved ? 1 : -1);
-      setLore(hit.item.key, Math.max(0, Math.min(next, max)));
+    // Ticking off a sequenced trigger is what advances its counter. Clamp so
+    // re-ticking the finished row cannot run past the end.
+    var seq = hit.trigger.sequence;
+    if (seq) {
+      var cap = (seq.dir === 'down' ? seq.start : seq.max) || 0;
+      var next = stepsOf(hit.item.key) + (nowResolved ? 1 : -1);
+      setSteps(hit.item.key, seq.openEnded ? Math.max(0, next) : Math.max(0, Math.min(next, cap)));
     }
     persist();
   }
 
-  /* ---------------- lore counters ---------------- */
+  /* ---------------- sequence counters ----------------
+     One integer per copy: how many steps that card has taken. Sagas count lore,
+     Sieges count defence removed, Classes count levels gained. */
 
-  function loreOf(key) {
+  function stepsOf(key) {
     var c = state.game && state.game.counters;
     return (c && c[key]) || 0;
   }
 
-  function setLore(key, n) {
+  function setSteps(key, n) {
     if (!state.game) { return; }
     state.game.counters = state.game.counters || {};
     if (n <= 0) { delete state.game.counters[key]; }
@@ -233,18 +236,49 @@
   }
 
   /**
-   * The chapter a Saga is showing right now. Once the row is ticked the counter
-   * has already advanced, so step back one to keep the row showing what was run.
+   * Where a sequenced trigger stands. Once the row is ticked the counter has
+   * already advanced, so step back one to keep the row showing what was run.
    */
-  function chapterFor(trigger, key, alreadyDone) {
-    if (!trigger.saga) { return null; }
-    var lore = loreOf(key) - (alreadyDone ? 1 : 0);
-    return Trig.sagaChapter(trigger.saga, Math.max(0, lore));
+  function stateFor(trigger, key, alreadyDone) {
+    if (!trigger.sequence) { return null; }
+    return Trig.sequenceState(trigger.sequence, Math.max(0, stepsOf(key) - (alreadyDone ? 1 : 0)));
   }
 
-  function sagaOf(name) {
+  function sequenceOf(name) {
     var a = analysis[name];
-    return a && a.saga ? a.saga : null;
+    return a && a.sequence ? a.sequence : null;
+  }
+
+  /* ---------------- escalating triggers ----------------
+     Abilities that do something different on each resolution within a turn.
+     Counted per copy per turn, so the tally resets when the turn does. */
+
+  function tierKey(key, triggerId) { return key + '@' + triggerId; }
+
+  function tierCount(key, triggerId) {
+    var t = state.game && state.game.tiers;
+    return (t && t[tierKey(key, triggerId)]) || 0;
+  }
+
+  function bumpTier(key, triggerId, delta) {
+    if (!state.game) { return; }
+    state.game.tiers = state.game.tiers || {};
+    var k = tierKey(key, triggerId);
+    var n = Math.max(0, tierCount(key, triggerId) + delta);
+    if (n === 0) { delete state.game.tiers[k]; } else { state.game.tiers[k] = n; }
+    persist();
+  }
+
+  /** Every escalating trigger on a card currently being tracked. */
+  function escalating() {
+    var out = [];
+    activeBoard().forEach(function (it) {
+      if (!it.analysis) { return; }
+      it.analysis.triggers.forEach(function (t) {
+        if (t.tiers) { out.push({ item: it, trigger: t }); }
+      });
+    });
+    return out;
   }
 
   function pruneResolved() {
@@ -255,6 +289,7 @@
     });
     g.resolved = keep;
     g.answers = {};
+    g.tiers = {};
   }
 
   /* ---------------- turn questions ---------------- */
@@ -422,7 +457,7 @@
     hydrate(deck);
     if (!state.game || state.game.deckId !== deck.id) {
       state.game = { deckId: deck.id, turn: 1, phaseIndex: 1, myTurn: true,
-                     zones: {}, resolved: {}, answers: {}, counters: {} };
+                     zones: {}, resolved: {}, answers: {}, counters: {}, tiers: {} };
       // Commanders start where you can see them.
       deck.entries.forEach(function (e) {
         if (e.isCommander) { state.game.zones[instKey(e.name, 0)] = 'command'; }
@@ -566,18 +601,17 @@
 
     host.innerHTML = hits.map(function (h) {
       var done = isResolved(h);
-      var ch = chapterFor(h.trigger, h.item.key, done);
-      var text = ch ? ch.text : h.trigger.text;
-      var critical = h.trigger.critical || (ch && ch.done);
+      var st = stateFor(h.trigger, h.item.key, done);
+      var text = st ? st.text : h.trigger.text;
+      var critical = h.trigger.critical || (st && st.done && h.trigger.sequence.endCritical);
 
       var tags = '';
-      if (ch) {
-        tags += ch.done
-          ? '<span class="tag danger">sacrifice it</span>'
-          : '<span class="tag chapter">chapter ' + roman(ch.chapter) + ' of ' + roman(ch.max) + '</span>' +
-            (ch.last ? '<span class="tag warn">final chapter</span>' : '');
+      if (st) {
+        tags += '<span class="tag chapter">' + esc(st.display) + '</span>';
+        if (st.done) { tags += '<span class="tag danger">' + (h.trigger.sequence.endCritical ? 'act now' : 'finished') + '</span>'; }
+        else if (st.last) { tags += '<span class="tag warn">last one</span>'; }
       }
-      if (critical && !ch) { tags += '<span class="tag danger">must not miss</span>'; }
+      if (critical && !st) { tags += '<span class="tag danger">must not miss</span>'; }
       if (h.trigger.conditional) { tags += '<span class="tag dim">only if you used it</span>'; }
       if (h.trigger.scope === 'each') { tags += '<span class="tag">every turn</span>'; }
       if (h.item.zone !== 'battlefield') { tags += '<span class="tag dim">' + esc(h.item.zone) + '</span>'; }
@@ -593,6 +627,12 @@
     }).join('');
   }
 
+  var SEQ_TITLE = {
+    saga: 'Saga progress', class: 'Class levels', levelup: 'Level', siege: 'Siege defence',
+    'case': 'Case', vanishing: 'Vanishing', fading: 'Fading', suspend: 'Suspended',
+    cumulative: 'Cumulative upkeep', counters: 'Counters'
+  };
+
   var ROMAN_OUT = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   function roman(n) { return ROMAN_OUT[n] || String(n); }
 
@@ -607,13 +647,40 @@
     block.classList.remove('hidden');
 
     var groups = questions();
-    $('#watch-count').textContent = groups.length;
+    var esc2 = escalating();
+    $('#watch-count').textContent = groups.length + esc2.length;
 
-    if (!groups.length) {
+    if (!groups.length && !esc2.length) {
       host.innerHTML = '<div class="empty small">Nothing in this deck triggers off events.</div>';
       return;
     }
-    host.innerHTML = groups.map(function (q) { return questionRow(q, false); }).join('');
+
+    host.innerHTML =
+      esc2.map(escalatingRow).join('') +
+      groups.map(function (q) { return questionRow(q, false); }).join('');
+  }
+
+  /**
+   * An ability that does something different each time it resolves in a turn.
+   * Tapping it counts one resolution and shows what that resolution does.
+   */
+  function escalatingRow(e) {
+    var times = tierCount(e.item.key, e.trigger.id);
+    var ts = Trig.tierState(e.trigger.tiers, times);
+
+    return '<div class="question escalating' + (times ? ' answered' : '') + '">' +
+      '<button class="q-main" data-esc="' + esc(e.item.key + '||' + e.trigger.id) + '">' +
+        '<span class="q-ask">' + esc(e.item.name) +
+          '<span class="tag chapter">' +
+            (ts.spent ? 'spent' : 'resolution ' + ts.capped + ' of ' + ts.max) + '</span>' +
+        '</span>' +
+        '<span class="q-tier">' + Mana.render(ts.text) + '</span>' +
+      '</button>' +
+      (times
+        ? '<button class="q-count" data-escclear="' + esc(e.item.key + '||' + e.trigger.id) +
+          '" title="Tap to reset">&times;' + times + '</button>'
+        : '<span class="q-hint">tap</span>') +
+    '</div>';
   }
 
   /** One tappable question. Tapping it counts an occurrence and names the cards. */
@@ -676,11 +743,15 @@
 
     var html = active.map(function (it) {
       var n = phaseTriggerCount(it.name);
-      var saga = sagaOf(it.name);
-      var badge = saga
-        ? '<span class="pill chapter-pill">' + (loreOf(it.key) >= saga.max
-            ? 'done' : roman(loreOf(it.key) + 1)) + '</span>'
-        : (n ? '<span class="pill dim">' + n + '</span>' : '');
+      var seq = sequenceOf(it.name);
+      var badge;
+      if (seq) {
+        var st = Trig.sequenceState(seq, stepsOf(it.key));
+        badge = '<span class="pill chapter-pill">' +
+          (st.done ? 'done' : (seq.roman ? roman(st.value) : st.value)) + '</span>';
+      } else {
+        badge = n ? '<span class="pill dim">' + n + '</span>' : '';
+      }
       return '<span class="board-item">' +
         '<button class="board-chip zone-' + esc(it.zone) + '" data-inst="' + esc(it.key) + '">' +
           esc(it.name) + badge +
@@ -863,32 +934,66 @@
       '</div>';
     }
 
-    // Sagas get an explicit lore counter you can correct by hand.
-    var saga = sagaOf(name);
-    if (saga) {
-      var lore = loreOf(key);
-      var cur = Trig.sagaChapter(saga, lore);
-      html += '<h3>Saga progress</h3>' +
+    // Anything sequenced gets a counter you can also correct by hand.
+    var seq = sequenceOf(name);
+    if (seq) {
+      var steps = stepsOf(key);
+      var cur = Trig.sequenceState(seq, steps);
+      var keys = Object.keys(seq.stages || {}).map(Number)
+        .sort(function (x, y) { return x - y; });
+
+      html += '<h3>' + esc(SEQ_TITLE[seq.kind] || 'Progress') + '</h3>' +
         '<div class="saga-box">' +
           '<div class="saga-head">' +
-            '<button class="btn ghost small" data-lore="-1" aria-label="Remove a lore counter">&minus;</button>' +
-            '<span class="saga-state">' +
-              (cur.done
-                ? 'All ' + roman(saga.max) + ' chapters done — sacrifice it'
-                : 'Next: chapter ' + roman(cur.chapter) + ' of ' + roman(saga.max)) +
-              '<span class="muted"> · ' + lore + ' lore counter' + (lore === 1 ? '' : 's') + '</span>' +
+            '<button class="btn ghost small" data-lore="-1" aria-label="Step back">&minus;</button>' +
+            '<span class="saga-state">' + esc(cur.display) +
+              (cur.done ? '' : '<span class="muted"> · next</span>') +
             '</span>' +
-            '<button class="btn ghost small" data-lore="1" aria-label="Add a lore counter">+</button>' +
+            '<button class="btn ghost small" data-lore="1" aria-label="Step forward">+</button>' +
           '</div>' +
-          Object.keys(saga.chapters).map(Number).sort(function (x, y) { return x - y; })
-            .map(function (n) {
-              var state2 = n <= lore ? ' done' : (n === lore + 1 ? ' next' : '');
-              return '<div class="saga-chapter' + state2 + '">' +
-                '<span class="sc-num">' + roman(n) + '</span>' +
-                '<span class="sc-text">' + Mana.render(saga.chapters[n]) + '</span>' +
+          (keys.length
+            ? keys.map(function (n) {
+                var pos = seq.dir === 'down' ? null
+                  : cur.done ? ' done'
+                  : (n < cur.value ? ' done' : (n === cur.value ? ' next' : ''));
+                var label = seq.roman ? roman(n)
+                  : (seq.stageNames && seq.stageNames[n]) ? seq.stageNames[n] : String(n);
+                var cost = seq.costs && seq.costs[n]
+                  ? '<span class="sc-cost">' + Mana.render(seq.costs[n]) + '</span>' : '';
+                return '<div class="saga-chapter' + (pos || '') + '">' +
+                  '<span class="sc-num">' + esc(label) + '</span>' +
+                  '<span class="sc-text">' + Mana.render(seq.stages[n]) + cost + '</span>' +
+                '</div>';
+              }).join('')
+            : '<div class="saga-chapter next"><span class="sc-num">&bull;</span>' +
+              '<span class="sc-text">' + Mana.render(cur.text) + '</span></div>') +
+          (seq.levelCost ? '<div class="muted" style="margin-top:6px">Level up ' +
+            Mana.render(seq.levelCost) + '</div>' : '') +
+          (seq.upkeepCost ? '<div class="muted" style="margin-top:6px">Cumulative upkeep ' +
+            Mana.render(seq.upkeepCost) + ' per age counter</div>' : '') +
+        '</div>';
+    }
+
+    // Escalating abilities: how many times it has resolved this turn.
+    if (a) {
+      a.triggers.filter(function (t) { return t.tiers; }).forEach(function (t) {
+        var ts = Trig.tierState(t.tiers, tierCount(key, t.id));
+        html += '<h3>Escalating this turn</h3>' +
+          '<div class="saga-box">' +
+            '<div class="saga-head">' +
+              '<button class="btn ghost small" data-tier="-1" data-tid="' + esc(t.id) + '">&minus;</button>' +
+              '<span class="saga-state">Resolution ' + ts.time + ' of ' + ts.max + '</span>' +
+              '<button class="btn ghost small" data-tier="1" data-tid="' + esc(t.id) + '">+</button>' +
+            '</div>' +
+            t.tiers.steps.map(function (s) {
+              var pos = s.n < ts.time ? ' done' : (s.n === ts.capped && !ts.spent ? ' next' : '');
+              return '<div class="saga-chapter' + pos + '">' +
+                '<span class="sc-num">' + s.n + '</span>' +
+                '<span class="sc-text">' + Mana.render(s.text) + '</span>' +
               '</div>';
             }).join('') +
-        '</div>';
+          '</div>';
+      });
     }
 
     if (a && a.triggers.length) {
@@ -896,7 +1001,7 @@
         var when = t.type === 'phase'
           ? (D.PHASE_BY_ID[t.phase] ? D.PHASE_BY_ID[t.phase].name : t.phase)
           : (D.EVENT_BY_ID[t.event] ? D.EVENT_BY_ID[t.event].name : t.event);
-        if (t.saga) { return ''; }   // shown by the Saga progress block above
+        if (t.sequence) { return ''; }   // shown by the progress block above
         return '<div class="detail-trigger' + (t.critical ? ' critical' : '') + '">' +
           '<div class="dt-when">' + esc(when) +
             (t.scope === 'each' ? ' <span class="tag">every turn</span>' : '') +
@@ -1159,11 +1264,20 @@
       renderPlay();
     });
     $('#detail-body').addEventListener('click', function (ev) {
+      if (!detailKey) { return; }
+      var tier = ev.target.closest('[data-tier]');
+      if (tier) {
+        bumpTier(detailKey, tier.getAttribute('data-tid'), parseInt(tier.getAttribute('data-tier'), 10));
+        openInstance(detailKey);
+        renderPlay();
+        return;
+      }
       var step = ev.target.closest('[data-lore]');
-      if (!step || !detailKey) { return; }
-      var saga = sagaOf(detailKey.split('§')[0]);
-      var next = loreOf(detailKey) + parseInt(step.getAttribute('data-lore'), 10);
-      setLore(detailKey, Math.max(0, Math.min(next, saga ? saga.max : next)));
+      if (!step) { return; }
+      var seq = sequenceOf(detailKey.split('§')[0]);
+      var cap = seq ? ((seq.dir === 'down' ? seq.start : seq.max) || 0) : 0;
+      var next = stepsOf(detailKey) + parseInt(step.getAttribute('data-lore'), 10);
+      setSteps(detailKey, (!seq || seq.openEnded) ? Math.max(0, next) : Math.max(0, Math.min(next, cap)));
       openInstance(detailKey);
       renderPlay();
     });
@@ -1230,6 +1344,21 @@
 
   function bindQuestions(sel) {
     $(sel).addEventListener('click', function (ev) {
+      var escStep = ev.target.closest('[data-esc]');
+      if (escStep) {
+        var p = escStep.getAttribute('data-esc').split('||');
+        bumpTier(p[0], p[1], 1);
+        buzz(14);
+        renderPlay();
+        return;
+      }
+      var escClear = ev.target.closest('[data-escclear]');
+      if (escClear) {
+        var q = escClear.getAttribute('data-escclear').split('||');
+        bumpTier(q[0], q[1], -tierCount(q[0], q[1]));
+        renderPlay();
+        return;
+      }
       var clear = ev.target.closest('[data-clear]');
       if (clear) { clearAnswer(clear.getAttribute('data-clear')); return; }
       var card = ev.target.closest('.q-card');
