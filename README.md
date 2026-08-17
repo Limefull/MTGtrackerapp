@@ -181,6 +181,33 @@ The app appears at `https://<user>.github.io/MTGtrackerapp/` within a minute or 
 **On your phone:** open that URL in the browser and choose *Add to Home Screen*.
 It then launches full-screen and runs offline.
 
+### As an Android APK
+
+There is also a real APK, so no hosting is involved at all — every file ships
+inside the package.
+
+GitHub Actions builds it on each push. Grab it from the
+[latest run](https://github.com/Limefull/MTGtrackerapp/actions/workflows/android.yml):
+open the newest green run, download the **trigger-tracker-apk** artifact, unzip
+it, and copy the `.apk` to your phone. Android will ask you to allow installs
+from whichever app you opened it with, and Play Protect will warn that the
+developer is unrecognised — expected for a sideloaded personal build.
+
+The APK is **debug-signed with a throwaway key generated per build**, so a newer
+APK will not install over an older one; uninstall first, or move to a fixed
+release key if that becomes annoying.
+
+To build it yourself you need JDK 17 and the Android SDK:
+
+```bash
+node tools/build-assets.js && cd android && gradle assembleDebug
+```
+
+The app is the same web build inside a WebView, served over
+`https://appassets.androidplatform.net` by `WebViewAssetLoader` rather than
+`file://` — that gives the page a real secure origin, so localStorage persists
+and the Scryfall lookup is an ordinary cross-origin request.
+
 ---
 
 ## How the trigger detection works
@@ -258,7 +285,8 @@ js/store.js             persistence
 js/app.js               screens, game loop, rendering
 js/sample.js            the sample decklist
 sw.js                   offline service worker
-tools/                  icon generator and engine tests
+android/                minimal WebView wrapper for the APK build
+tools/                  icon generator, asset bundler and engine tests
 ```
 
 Scripts are plain classic `<script>` tags with a global namespace rather than ES
